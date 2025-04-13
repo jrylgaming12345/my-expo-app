@@ -1,0 +1,7 @@
+// Filter and Search Logic
+const filteredJobs = jobs.filter((job) => {
+  const jobTitle = job.title?.toLowerCase() || ''; // Ensure job title is defined and convert to lowercase
+  const matchesSearch = jobTitle.includes(search.toLowerCase());
+  const matchesFilter = filter === 'Latest' || job.collarType === filter;
+  return matchesSearch && matchesFilter;
+});
