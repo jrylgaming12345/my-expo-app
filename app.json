@@ -20,10 +20,12 @@
       "supportsTablet": true
     },
     "android": {
+      "buildType": "apk",
       "config": {
         "googleMaps": {
           "apiKey": "AIzaSyD3zCbepzaKPlYkAcelb8lg-OyeaidnD5A"
         }
+        
       },
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -39,6 +41,14 @@
         "projectId": "dc62eca9-f771-4f11-8279-53cbcd047ce3"
       }
     },
+
+    "production": {
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      }
+    },
+    
     "owner": "jhon3424"
   }
 }
