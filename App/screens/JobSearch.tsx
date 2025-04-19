@@ -8,6 +8,7 @@ import {
   FlatList,
   TouchableOpacity,
   Image,
+  ActivityIndicator
 } from "react-native";
 import { db } from "../../DataBases/firebaseConfig";
 import { collection, query, where, getDocs } from "firebase/firestore";
@@ -20,18 +21,17 @@ const JobSearch = () => {
   const navigation = useNavigation();
 
   const handleSearch = async () => {
-    if (!searchTerm.trim()) return; // Ensure search term is not empty
+    if (!searchTerm.trim()) return;
     setLoading(true);
 
-    const normalizedSearchTerm = searchTerm.trim().toLowerCase(); // Normalize the search term to lowercase
-
+    const normalizedSearchTerm = searchTerm.trim().toLowerCase();
     console.log("Starting search with term:", normalizedSearchTerm);
 
     const jobsRef = collection(db, "jobs");
     const usersRef = collection(db, "users");
 
     try {
-      // Fetch all jobs that match the search term
+      // Fetch jobs matching search term
       const jobSnapshot = await getDocs(jobsRef);
       const jobResults = jobSnapshot.docs
         .map((doc) => ({ id: doc.id, type: "job", ...doc.data() }))
@@ -40,7 +40,7 @@ const JobSearch = () => {
         );
 
       // Fetch user details for each job
-      const userIds = [...new Set(jobResults.map((job) => job.userId))]; // Get unique userIds
+      const userIds = [...new Set(jobResults.map((job) => job.userId))];
       const userPromises = userIds.map((userId) =>
         getDocs(query(usersRef, where("id", "==", userId)))
       );
@@ -50,13 +50,13 @@ const JobSearch = () => {
         snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
       );
 
-      // Attach user data to each job
+      // Combine job data with user details
       const jobsWithUserDetails = jobResults.map((job) => {
         const user = users.find((user) => user.id === job.userId) || {};
         return { ...job, user };
       });
 
-      // Combine results (jobs with user details + other users matching the search term)
+      // Fetch users matching search term
       const userSnapshot = await getDocs(usersRef);
       const userResults = userSnapshot.docs
         .map((doc) => ({ id: doc.id, type: "user", ...doc.data() }))
@@ -67,7 +67,7 @@ const JobSearch = () => {
       const results = [...jobsWithUserDetails, ...userResults];
       console.log("Search results:", results);
 
-      setSearchResults(results); // Update search results state
+      setSearchResults(results);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -76,27 +76,17 @@ const JobSearch = () => {
   };
 
   const renderSearchItem = ({ item }) => {
-    let user = null;
-
-    if (item.type === "job") {
-      // For jobs, we assume the userId corresponds to a user in the 'users' collection
-      user = item.userId; // Assuming userId is stored in the job document
-    } else if (item.type === "user") {
-      // For users, directly use the user data
-      user = item;
-    }
+    const user = item.type === "job" ? item.user : item;
+    const isUserResult = item.type === "user";
 
     return (
       <TouchableOpacity
         style={styles.postCard}
         onPress={() => {
-          if (item.type === "job") {
-            // Navigate to JobDetails with the jobId
-            navigation.navigate("JobDetails", { jobId: item.id });
-          } else if (item.type === "user") {
-            // Navigate to UserProfile with the userId
-            navigation.navigate("UserProfile", { userId: item.id });
-          }
+          navigation.navigate(
+            isUserResult ? "UserProfile" : "JobDetails",
+            { [isUserResult ? "userId" : "jobId"]: item.id }
+          );
         }}
         activeOpacity={0.8}
       >
@@ -110,20 +100,34 @@ const JobSearch = () => {
               }
               style={styles.postProfilePic}
             />
-            <View>
+            <View style={styles.userInfo}>
               <Text style={styles.postUsername}>
-                {user.username || "Loading..."}
+                {user.username || "Anonymous"}
               </Text>
               <Text style={styles.postTimestamp}>
                 {item.createdAt
                   ? new Date(item.createdAt.seconds * 1000).toLocaleString()
-                  : "Just now"}
+                  : "Recently"}
+              </Text>
+            </View>
+            <View style={styles.typeBadge}>
+              <Text style={styles.typeText}>
+                {isUserResult ? "Profile" : "Job"}
               </Text>
             </View>
           </View>
         )}
-        <Text style={styles.postTitle}>{item.role || "No Title"}</Text>
-        {item.images && (
+        
+        {!isUserResult && (
+          <>
+            <Text style={styles.postTitle}>{item.title || "No Title"}</Text>
+            <Text style={styles.postDescription} numberOfLines={2}>
+              {item.description || "No description available"}
+            </Text>
+          </>
+        )}
+
+        {item.images && item.images.length > 0 && (
           <FlatList
             data={item.images}
             horizontal
@@ -132,6 +136,7 @@ const JobSearch = () => {
               <Image source={{ uri: image }} style={styles.postImage} />
             )}
             showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.imageList}
           />
         )}
       </TouchableOpacity>
@@ -140,31 +145,59 @@ const JobSearch = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Find Jobs & People</Text>
+      </View>
+
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Search for a job title or user..."
-          placeholderTextColor="#888"
+          placeholder="Search for jobs or users..."
+          placeholderTextColor="#999"
           value={searchTerm}
           onChangeText={setSearchTerm}
+          onSubmitEditing={handleSearch}
+          returnKeyType="search"
         />
-        <TouchableOpacity style={styles.searchButton} onPress={handleSearch}>
-          <Image
-            source={require("../screens/assets/search_logo.png")}
-            style={styles.searchIcon}
-          />
+        <TouchableOpacity 
+          style={styles.searchButton} 
+          onPress={handleSearch}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Image
+              source={require("../screens/assets/search_logo.png")}
+              style={styles.searchIcon}
+            />
+          )}
         </TouchableOpacity>
       </View>
 
       {loading ? (
-        <Text style={styles.loadingText}>Searching...</Text>
-      ) : (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#0047AB" />
+          <Text style={styles.loadingText}>Searching...</Text>
+        </View>
+      ) : searchResults.length > 0 ? (
         <FlatList
           data={searchResults}
           keyExtractor={(item) => item.id}
           renderItem={renderSearchItem}
           contentContainerStyle={styles.resultsList}
+          showsVerticalScrollIndicator={false}
         />
+      ) : (
+        <View style={styles.emptyState}>
+          <Image
+            source={require("../screens/assets/search_logo.png")}
+            style={styles.emptyImage}
+          />
+          <Text style={styles.emptyText}>
+            {searchTerm ? "No results found" : "Search for jobs or people"}
+          </Text>
+        </View>
       )}
     </SafeAreaView>
   );
@@ -173,92 +206,151 @@ const JobSearch = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f8f8f8",
-    padding: 20,
-    paddingBottom: 50,
+    backgroundColor: "#f5f7fa",
+    paddingHorizontal: 16,
+  },
+  header: {
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#2c3e50",
   },
   searchContainer: {
     flexDirection: "row",
-
     alignItems: "center",
-    marginBottom: 15,
-    marginTop: 30,
+    marginBottom: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   searchInput: {
-    flex: 1,
-    backgroundColor: "#fff",
-    color: "#333",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginRight: 10,
-    borderColor: "grey",
-    borderWidth: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F1F3F4",
+    borderRadius: 100,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    width: 300,
   },
   searchButton: {
-    padding: 10,
-    borderRadius: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#4A90E2",
     alignItems: "center",
     justifyContent: "center",
-    borderColor: "#0047AB",
-    borderWidth: 2,
+    marginLeft:10,
   },
   searchIcon: {
-    width: 20,
-    height: 20,
-    tintColor: "black",
+    width: 24,
+    height: 24,
+    tintColor: "#fff",
   },
   postCard: {
     backgroundColor: "#fff",
-    padding: 15,
-    borderRadius: 40,
-    marginBottom: 15,
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   postHeader: {
     flexDirection: "row",
     alignItems: "center",
+    marginBottom: 12,
   },
   postProfilePic: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "#f0f0f0",
+  },
+  userInfo: {
+    flex: 1,
+    marginLeft: 12,
   },
   postUsername: {
-    color: "#333",
-    fontSize: 18,
-    fontWeight: "bold",
-    marginLeft: 10,
+    color: "#2c3e50",
+    fontSize: 16,
+    fontWeight: "600",
   },
   postTimestamp: {
-    color: "#555",
-    fontSize: 14,
-    marginLeft: 10,
+    color: "#95a5a6",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  typeBadge: {
+    backgroundColor: "#e1f0ff",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  typeText: {
+    color: "#0047AB",
+    fontSize: 12,
+    fontWeight: "600",
   },
   postTitle: {
-    color: "#333",
+    color: "#2c3e50",
     fontSize: 18,
-    fontWeight: "bold",
-    marginTop: 10,
+    fontWeight: "700",
+    marginBottom: 8,
   },
   postDescription: {
-    color: "#555",
+    color: "#7f8c8d",
     fontSize: 14,
-    marginTop: 5,
+    lineHeight: 20,
+    marginBottom: 12,
+  },
+  imageList: {
+    paddingTop: 8,
   },
   postImage: {
-    width: 100,
-    height: 100,
+    width: 120,
+    height: 120,
     borderRadius: 8,
-    marginRight: 5,
+    marginRight: 8,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingText: {
-    color: "#4CAF50",
+    color: "#0047AB",
     fontSize: 16,
+    marginTop: 12,
+    fontWeight: "500",
+  },
+  emptyState: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingBottom: 100,
+  },
+  emptyImage: {
+    width: 150,
+    height: 150,
+    opacity: 0.6,
+    marginBottom: 20,
+  },
+  emptyText: {
+    color: "#95a5a6",
+    fontSize: 18,
     textAlign: "center",
-    marginTop: 20,
+    marginTop: 10,
   },
   resultsList: {
-    paddingBottom: 100,
+    paddingBottom: 20,
   },
 });
 

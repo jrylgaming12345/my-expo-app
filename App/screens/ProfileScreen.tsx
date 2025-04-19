@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   Alert,
   FlatList,
+  ScrollView,
+  ActivityIndicator
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { db, storage } from "../../DataBases/firebaseConfig";
@@ -30,11 +32,13 @@ import NetInfo from "@react-native-community/netinfo";
 const ProfileScreen = () => {
   const [user, setUser] = useState({ name: "", email: "", image: "" });
   const [jobs, setJobs] = useState([]);
-  const [pickedImageUri, setPickedImageUri] = useState(null); // To store selected image URI
-  const [isImageSelected, setIsImageSelected] = useState(false); // To track if a new image is selected
-  const navigation = useNavigation();
-  const [followersCount, setFollowersCount] = useState(0); // Add followers count state
+  const [pickedImageUri, setPickedImageUri] = useState(null);
+  const [isImageSelected, setIsImageSelected] = useState(false);
+  const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUploading, setIsUploading] = useState(false);
+  const navigation = useNavigation();
 
   const auth = getAuth();
   const currentUserId = auth.currentUser?.uid;
@@ -46,15 +50,29 @@ const ProfileScreen = () => {
 
   useEffect(() => {
     if (currentUserId) {
-      fetchUserDetails(); // Fetch user details
-      fetchJobs(); // Fetch jobs created by the user
-      fetchFollowersCount(); // Fetch followers count
-      fetchFollowingCount(); // Fetch following count
+      fetchData();
     } else {
       Alert.alert("Error", "User is not logged in.");
       navigation.navigate("Login");
     }
   }, [currentUserId]);
+
+  const fetchData = async () => {
+    try {
+      setIsLoading(true);
+      await Promise.all([
+        fetchUserDetails(),
+        fetchJobs(),
+        fetchFollowersCount(),
+        fetchFollowingCount()
+      ]);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      Alert.alert("Error", "Failed to load profile data.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchFollowingCount = async () => {
     try {
@@ -62,8 +80,8 @@ const ProfileScreen = () => {
       const userSnapshot = await getDoc(userRef);
       if (userSnapshot.exists()) {
         const data = userSnapshot.data();
-        const following = data.following || []; // Ensure the array exists
-        setFollowingCount(following.length); // Count the elements in the array
+        const following = data.following || [];
+        setFollowingCount(following.length);
       }
     } catch (error) {
       console.error("Error fetching following count:", error);
@@ -103,8 +121,8 @@ const ProfileScreen = () => {
       const userSnapshot = await getDoc(userRef);
       if (userSnapshot.exists()) {
         const data = userSnapshot.data();
-        const followers = data.followers || []; // Ensure the array exists
-        setFollowersCount(followers.length); // Count the elements in the array
+        const followers = data.followers || [];
+        setFollowersCount(followers.length);
       }
     } catch (error) {
       console.error("Error fetching followers count:", error);
@@ -151,14 +169,13 @@ const ProfileScreen = () => {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
-        quality: 1,
+        aspect: [1, 1],
+        quality: 0.8,
       });
 
       if (!result.canceled) {
-        setPickedImageUri(result.assets[0].uri); // Temporarily store selected image URI
-        setIsImageSelected(true); // Set to true when an image is selected
-      } else {
-        console.log("Image selection cancelled.");
+        setPickedImageUri(result.assets[0].uri);
+        setIsImageSelected(true);
       }
     } catch (error) {
       console.error("Error selecting image:", error);
@@ -179,6 +196,7 @@ const ProfileScreen = () => {
         return;
       }
 
+      setIsUploading(true);
       const storageRef = ref(storage, `profileImages/${currentUserId}`);
       const response = await fetch(pickedImageUri);
       const blob = await response.blob();
@@ -190,53 +208,105 @@ const ProfileScreen = () => {
       await setDoc(userRef, { profilePicture: downloadUrl }, { merge: true });
 
       setUser((prevUser) => ({ ...prevUser, image: downloadUrl }));
-      setPickedImageUri(null); // Clear selected image URI after saving
-      setIsImageSelected(false); // Reset the image selection state
-      Alert.alert("Success", "Profile picture updated successfully.");
+      setPickedImageUri(null);
+      setIsImageSelected(false);
+      Alert.alert("Success", "Profile picture updated successfully!");
     } catch (error) {
       console.error("Error saving image:", error);
       Alert.alert("Error", "Failed to update profile picture.");
+    } finally {
+      setIsUploading(false);
     }
   };
 
-  const renderItem = ({ item }) => {
-    if (item.id) {
-      return (
-        <View style={styles.jobContainer}>
-          <Text style={styles.jobTitle}>{item.title}</Text>
-          <TouchableOpacity onPress={() => handleDeleteJob(item.id)}>
-            <Text style={styles.deleteButton}>Delete</Text>
-          </TouchableOpacity>
-        </View>
+  const handleDeleteJob = async (jobId) => {
+    try {
+      Alert.alert(
+        "Delete Job",
+        "Are you sure you want to delete this job?",
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+          },
+          {
+            text: "Delete",
+            onPress: async () => {
+              await deleteDoc(doc(db, "jobs", jobId));
+              fetchJobs();
+              Alert.alert("Success", "Job deleted successfully.");
+            },
+            style: "destructive",
+          },
+        ]
       );
+    } catch (error) {
+      console.error("Error deleting job:", error);
+      Alert.alert("Error", "Failed to delete job.");
     }
+  };
 
-    const handleLogout = () => {
-      auth
-        .signOut()
-        .then(() => {
-          // Clear the active session and other stored user data
-          AsyncStorage.removeItem("activeSession");
-          AsyncStorage.removeItem("userData"); // Assuming you've stored some user data
-          navigation.reset({
-            index: 0,
-            routes: [{ name: "Login" }],
-          });
-        })
-        .catch((error) => {
-          console.error("Error logging out:", error);
-          Alert.alert("Error", "Failed to log out.");
-        });
-    };
+  const handleLogout = () => {
+    Alert.alert(
+      "Logout",
+      "Are you sure you want to logout?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Logout",
+          onPress: async () => {
+            try {
+              await auth.signOut();
+              await AsyncStorage.removeItem("activeSession");
+              await AsyncStorage.removeItem("userData");
+              navigation.reset({
+                index: 0,
+                routes: [{ name: "Login" }],
+              });
+            } catch (error) {
+              console.error("Error logging out:", error);
+              Alert.alert("Error", "Failed to log out.");
+            }
+          },
+          style: "destructive",
+        },
+      ]
+    );
+  };
 
-    return (
-      <View style={styles.profileContainer}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backButton}
+  const renderJobItem = ({ item }) => (
+    <View style={styles.jobContainer}>
+      <Text style={styles.jobTitle}>{item.title}</Text>
+      <View style={styles.jobActions}>
+        <TouchableOpacity 
+          onPress={() => navigation.navigate("EditJob", { jobId: item.id })}
+          style={styles.editButton}
         >
-          <Icon name="arrow-back" size={24} color="black" />
+          <Icon name="create-outline" size={18} color="#4CAF50" />
         </TouchableOpacity>
+        <TouchableOpacity 
+          onPress={() => handleDeleteJob(item.id)}
+          style={styles.deleteButton}
+        >
+          <Icon name="trash-outline" size={18} color="#F44336" />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderProfileHeader = () => (
+    <View style={styles.profileHeader}>
+      <TouchableOpacity
+        onPress={() => navigation.goBack()}
+        style={styles.backButton}
+      >
+        <Icon name="arrow-back" size={24} color="#333" />
+      </TouchableOpacity>
+      
+      <View style={styles.profileImageContainer}>
         <Image
           source={
             pickedImageUri
@@ -247,56 +317,81 @@ const ProfileScreen = () => {
           }
           style={styles.profileImage}
         />
-        <Text style={styles.profileName}>{user.name}</Text>
-        <Text style={styles.profileEmail}>{user.email}</Text>
-
-        {/* Follow Count Section */}
-        <View style={styles.followCountContainer}>
-          <View style={styles.followCountItem}>
-            <Text style={styles.followCountNumber}>{followersCount}</Text>
-            <Text style={styles.followCountLabel}>Followers</Text>
-          </View>
-          <View style={styles.followCountItem}>
-            <Text style={styles.followCountNumber}>{followingCount}</Text>
-            <Text style={styles.followCountLabel}>Following</Text>
-          </View>
-        </View>
-
         <TouchableOpacity
-          onPress={() => {
-            if (pickedImageUri) {
-              handleSaveImage(); // Save the profile picture if an image is selected
-            } else {
-              handleSelectImage(); // Select a new image if no image is selected
-            }
-          }}
-          style={styles.changeProfileButton}
+          onPress={isImageSelected ? handleSaveImage : handleSelectImage}
+          style={styles.cameraButton}
         >
           <Icon
-            name={pickedImageUri ? "save" : "camera"}
+            name={isImageSelected ? "save" : "camera"}
             size={20}
-            color="#007BFF"
-            style={styles.icon}
+            color="#FFF"
           />
-          <Text style={styles.changeProfileButtonText}>
-            {pickedImageUri ? "Save Profile Picture" : "Change Profile Picture"}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-          <Text style={styles.logoutButtonText}>Logout</Text>
         </TouchableOpacity>
       </View>
+      
+      <Text style={styles.profileName}>{user.name}</Text>
+      <Text style={styles.profileEmail}>{user.email}</Text>
+
+      <View style={styles.followCountContainer}>
+        <View style={styles.followCountItem}>
+          <Text style={styles.followCountNumber}>{followersCount}</Text>
+          <Text style={styles.followCountLabel}>Followers</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.followCountItem}>
+          <Text style={styles.followCountNumber}>{followingCount}</Text>
+          <Text style={styles.followCountLabel}>Following</Text>
+        </View>
+      </View>
+      
+      <TouchableOpacity 
+        onPress={handleLogout} 
+        style={styles.logoutButton}
+      >
+        <Icon name="log-out-outline" size={18} color="#F44336" />
+        <Text style={styles.logoutButtonText}>Logout</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007BFF" />
+      </View>
     );
-  };
+  }
 
   return (
     <View style={styles.container}>
       <FlatList
-        data={[{ id: null }, ...jobs]}
-        renderItem={renderItem}
-        keyExtractor={(item, index) => item.id || index.toString()}
+        ListHeaderComponent={renderProfileHeader}
+        data={jobs}
+        renderItem={renderJobItem}
+        keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Icon name="briefcase-outline" size={50} color="#CCC" />
+            <Text style={styles.emptyText}>No jobs posted yet</Text>
+            <TouchableOpacity 
+              style={styles.addJobButton}
+              onPress={() => navigation.navigate("PostJob")}
+            >
+              <Text style={styles.addJobButtonText}>Create Your First Job</Text>
+            </TouchableOpacity>
+          </View>
+        }
       />
+      
+      {isUploading && (
+        <View style={styles.uploadOverlay}>
+          <View style={styles.uploadBox}>
+            <ActivityIndicator size="large" color="#FFF" />
+            <Text style={styles.uploadText}>Uploading Profile Picture...</Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 };
@@ -304,109 +399,208 @@ const ProfileScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#F8F9FA",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#FFF",
   },
   listContainer: {
-    padding: 16,
-    flexGrow: 1,
+    paddingBottom: 20,
   },
-  profileContainer: {
+  profileHeader: {
     alignItems: "center",
-    marginBottom: 30,
-    marginTop: 40,
-    paddingVertical: 20,
-    backgroundColor: "#f1f1f1",
-    borderRadius: 10,
-    borderBottomLeftRadius: 100,
+    paddingVertical: 30,
+    paddingHorizontal: 20,
+    backgroundColor: "#FFF",
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+    marginBottom: 15,
+  },
+  backButton: {
+    position: "absolute",
+    top: 15,
+    left: 15,
+    zIndex: 1,
+    backgroundColor: "#F1F1F1",
+    borderRadius: 20,
+    padding: 5,
+  },
+  profileImageContainer: {
+    position: "relative",
+    marginBottom: 15,
   },
   profileImage: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    marginBottom: 10,
+    borderWidth: 3,
+    borderColor: "#FFF",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  cameraButton: {
+    position: "absolute",
+    bottom: 0,
+    right: 0,
+    backgroundColor: "#007BFF",
+    borderRadius: 20,
+    padding: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
   },
   profileName: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "bold",
+    color: "#333",
     marginBottom: 5,
   },
   profileEmail: {
     fontSize: 16,
-    color: "#555",
-    marginBottom: 15,
+    color: "#666",
+    marginBottom: 20,
   },
-  changeProfileButton: {
-    marginTop: 10,
-    flexDirection: "row", // Align icon and text horizontally
-    alignItems: "center", // Center the items vertically
-  },
-  changeProfileButtonText: {
-    color: "#007BFF",
-    fontSize: 16,
-    fontWeight: "500",
-    textDecorationLine: "underline",
-    marginLeft: 8, // Add space between icon and text
-  },
-  icon: {
-    // You can style the icon here (if needed)
-  },
-  logoutButton: {
-    marginTop: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 100,
-    borderColor: "red",
-    borderWidth: 2,
-  },
-  logoutButtonText: {
-    color: "red",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  jobContainer: {
-    padding: 16,
-    backgroundColor: "#f2f2f2",
-    marginBottom: 15,
-    borderRadius: 10,
-  },
-  jobTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 8,
-  },
-  deleteButton: {
-    color: "red",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginTop: 10,
-  },
-
-  backButton: {
-    position: "absolute",
-    top: 10,
-    left: 10,
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
   followCountContainer: {
     flexDirection: "row",
     justifyContent: "center",
-    marginBottom: 20,
+    marginBottom: 25,
+    alignItems: "center",
   },
   followCountItem: {
     alignItems: "center",
-    marginHorizontal: 15,
+    paddingHorizontal: 20,
   },
   followCountNumber: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: "bold",
+    color: "#333",
   },
   followCountLabel: {
     fontSize: 14,
     color: "#888",
+    marginTop: 5,
+  },
+  divider: {
+    width: 1,
+    height: 30,
+    backgroundColor: "#DDD",
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 25,
+    borderColor: "#F44336",
+    borderWidth: 1,
+  },
+  logoutButtonText: {
+    color: "#F44336",
+    fontSize: 16,
+    fontWeight: "600",
+    marginLeft: 8,
+  },
+  jobContainer: {
+    backgroundColor: "#FFF",
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 15,
+    marginBottom: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  jobTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    flex: 1,
+  },
+  jobActions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  editButton: {
+    padding: 8,
+    marginRight: 10,
+  },
+  deleteButton: {
+    padding: 8,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 40,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#888",
+    marginTop: 15,
+    marginBottom: 25,
+  },
+  addJobButton: {
+    backgroundColor: "#007BFF",
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 25,
+  },
+  addJobButtonText: {
+    color: "#FFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  uploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 100,
+  },
+  uploadBox: {
+    backgroundColor: "rgba(0,0,0,0.8)",
+    padding: 30,
+    borderRadius: 15,
+    alignItems: "center",
+  },
+  uploadText: {
+    color: "#FFF",
+    marginTop: 15,
+    fontSize: 16,
+  },
+
+  roleBadge: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginBottom: 15,
+  },
+  employerBadge: {
+    backgroundColor: '#4CAF50',
+  },
+  employeeBadge: {
+    backgroundColor: '#2196F3',
+  },
+  roleText: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 14,
   },
 });
 

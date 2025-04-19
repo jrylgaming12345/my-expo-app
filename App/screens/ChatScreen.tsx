@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { InteractionManager } from 'react-native';
 import {
   SafeAreaView,
   View,
@@ -11,6 +12,9 @@ import {
   Platform,
   Alert,
   Image,
+  ActivityIndicator,
+  Animated,
+  Dimensions
 } from 'react-native';
 import { db, auth } from '../../DataBases/firebaseConfig';
 import {
@@ -24,6 +28,10 @@ import {
   getDoc,
   updateDoc,
 } from 'firebase/firestore';
+import Icon from 'react-native-vector-icons/Ionicons';
+import { formatDistanceToNow } from 'date-fns';
+
+const { width } = Dimensions.get('window');
 
 const ChatScreen = ({ route, navigation }) => {
   const { chatId } = route.params;
@@ -31,10 +39,20 @@ const ChatScreen = ({ route, navigation }) => {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [otherUserName, setOtherUserName] = useState('');
-  const [otherUserProfilePic, setOtherUserProfilePic] = useState(
-    'https://via.placeholder.com/150'
-  );
+  const [otherUserProfilePic, setOtherUserProfilePic] = useState(null);
+  const [isSending, setIsSending] = useState(false);
   const flatListRef = useRef(null);
+  const inputRef = useRef(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  // Header animation
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   // Fetch messages in real-time
   useEffect(() => {
@@ -46,11 +64,18 @@ const ChatScreen = ({ route, navigation }) => {
         const msgs = snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
+          createdAt: doc.data().createdAt?.toDate() || new Date(),
         }));
     
-        console.log("Fetched messages:", msgs); // Log fetched messages
         setMessages(msgs);
         setLoading(false);
+        
+        // Scroll to bottom when new messages arrive
+        if (flatListRef.current && msgs.length > 0) {
+          setTimeout(() => {
+            flatListRef.current.scrollToEnd({ animated: true });
+          }, 100);
+        }
       });
     
       return () => unsubscribe();
@@ -86,24 +111,23 @@ const ChatScreen = ({ route, navigation }) => {
         // Identify the other participant
         const otherUserUid = participants.find((uid) => uid !== currentUserUid);
         if (!otherUserUid) {
-          throw new Error(
-            'Could not identify the other participant in this chat.'
-          );
+          throw new Error('Could not identify the other participant in this chat.');
         }
 
         // Fetch other user's details
         const userRef = doc(db, 'users', otherUserUid);
         const userSnap = await getDoc(userRef);
 
-        if (!userSnap.exists()) {
-          throw new Error('User details are unavailable.');
+        if (userSnap.exists()) {
+          const userData = userSnap.data();
+          setOtherUserName(userData.fullName || userData.username || 'Unknown');
+          setOtherUserProfilePic(userData.profilePicture || null);
+          
+          // Set header title
+          navigation.setOptions({
+            title: userData.fullName || userData.username || 'Chat',
+          });
         }
-
-        const userData = userSnap.data();
-        setOtherUserName(userData.username || 'Unknown');
-        setOtherUserProfilePic(
-          userData.profilePicture || 'https://via.placeholder.com/150'
-        );
       } catch (error) {
         console.error('Error fetching other user details:', error.message);
         Alert.alert('Error', error.message || 'Failed to load chat details.');
@@ -112,13 +136,6 @@ const ChatScreen = ({ route, navigation }) => {
 
     fetchOtherUserDetails();
   }, [chatId]);
-
-  // Scroll to the bottom when new messages arrive
-  useEffect(() => {
-    if (flatListRef.current) {
-      flatListRef.current.scrollToEnd({ animated: true });
-    }
-  }, [messages]);
 
   // Handle sending a message
   const handleSendMessage = async () => {
@@ -134,6 +151,8 @@ const ChatScreen = ({ route, navigation }) => {
     }
 
     try {
+      setIsSending(true);
+      
       // Send the message
       await addDoc(collection(db, 'chats', chatId, 'messages'), {
         text: newMessage,
@@ -154,68 +173,135 @@ const ChatScreen = ({ route, navigation }) => {
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Unable to send message.');
+    } finally {
+      setIsSending(false);
     }
+  };
+
+  const renderMessage = ({ item }) => {
+    const isCurrentUser = item.senderId === auth.currentUser?.uid;
+    const messageTime = formatDistanceToNow(item.createdAt, { addSuffix: true });
+
+    return (
+      <View
+        style={[
+          styles.messageContainer,
+          isCurrentUser ? styles.currentUserContainer : styles.otherUserContainer,
+        ]}
+      >
+        {!isCurrentUser && otherUserProfilePic && (
+          <Image
+            source={{ uri: otherUserProfilePic }}
+            style={styles.userAvatar}
+            onError={() => setOtherUserProfilePic(null)}
+          />
+        )}
+        
+        <View
+          style={[
+            styles.messageBubble,
+            isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble,
+          ]}
+        >
+          <Text style={[
+            styles.messageText,
+            isCurrentUser ? styles.currentUserText : styles.otherUserText
+          ]}>
+            {item.text}
+          </Text>
+          <Text style={[
+            styles.messageTime,
+            isCurrentUser ? styles.currentUserTime : styles.otherUserTime
+          ]}>
+            {messageTime}
+          </Text>
+        </View>
+      </View>
+    );
   };
 
   return (
     <SafeAreaView style={styles.container}>
       {loading ? (
-        <Text style={styles.loadingText}>Loading messages...</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#6C63FF" />
+          <Text style={styles.loadingText}>Loading conversation...</Text>
+        </View>
       ) : (
         <>
-          {/* Header with profile picture and name */}
-          <View style={styles.chatHeaderContainer}>
-            <Image
-              source={{ uri: otherUserProfilePic }}
-              style={styles.profilePic}
-              onError={() =>
-                setOtherUserProfilePic('https://via.placeholder.com/150')
-              }
-            />
-            <Text style={styles.chatHeader}>
-              Chat with {otherUserName || 'Loading...'}
-            </Text>
-          </View>
+          {/* Custom Header */}
+          <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
+            <TouchableOpacity 
+              onPress={() => navigation.goBack()}
+              style={styles.backButton}
+            >
+              <Icon name="arrow-back" size={24} color="#FFF" />
+            </TouchableOpacity>
+            {otherUserProfilePic && (
+              <Image
+                source={{ uri: otherUserProfilePic }}
+                style={styles.headerAvatar}
+                onError={() => setOtherUserProfilePic(null)}
+              />
+            )}
+            <View style={styles.headerTextContainer}>
+              <Text style={styles.headerName} numberOfLines={1}>
+                {otherUserName}
+              </Text>
+              <Text style={styles.headerStatus}>Online</Text>
+            </View>
+          </Animated.View>
 
           {/* Messages list */}
           <FlatList
             ref={flatListRef}
             data={messages}
-            renderItem={({ item }) => (
-              <View
-                style={[
-                  styles.message,
-                  item.senderId === auth.currentUser?.uid
-                    ? styles.sentMessage
-                    : styles.receivedMessage,
-                ]}
-              >
-                <Text style={styles.messageText}>{item.text}</Text>
-              </View>
-            )}
+            renderItem={renderMessage}
             keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.messagesContainer}
             ListEmptyComponent={
-              <Text style={styles.noMessages}>No messages yet.</Text>
+              <View style={styles.emptyContainer}>
+                <Icon name="chatbubbles-outline" size={60} color="#D3D3D3" />
+                <Text style={styles.emptyText}>No messages yet</Text>
+                <Text style={styles.emptySubtext}>
+                  Start the conversation with {otherUserName || 'your contact'}
+                </Text>
+              </View>
             }
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
           />
 
           {/* Input field for sending messages */}
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.inputContainer}
           >
-            <View style={styles.inputContainer}>
+            <View style={styles.inputWrapper}>
               <TextInput
+                ref={inputRef}
                 style={styles.textInput}
                 value={newMessage}
                 onChangeText={setNewMessage}
-                placeholder="Type a message"
-                placeholderTextColor="#888"
+                placeholder="Type a message..."
+                placeholderTextColor="#999"
+                multiline
+                blurOnSubmit={false}
+                onSubmitEditing={handleSendMessage}
               />
               <TouchableOpacity
-                style={styles.sendButton}
+                style={[
+                  styles.sendButton,
+                  newMessage.trim() === '' && styles.disabledButton
+                ]}
                 onPress={handleSendMessage}
+                disabled={newMessage.trim() === '' || isSending}
               >
-                <Text style={styles.sendButtonText}>Send</Text>
+                {isSending ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Icon name="send" size={20} color="#FFF" />
+                )}
               </TouchableOpacity>
             </View>
           </KeyboardAvoidingView>
@@ -228,79 +314,170 @@ const ChatScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f8f8',
+    backgroundColor: '#F5F7FB',
   },
-  chatHeaderContainer: {
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 15,
+    fontSize: 16,
+    color: '#6C63FF',
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 10,
-    borderBottomWidth: 1,
-    borderColor: '#ddd',
+    paddingVertical: 15,
+    paddingHorizontal: 15,
+    backgroundColor: '#4A90E2',
+    borderBottomLeftRadius: 20,
+    borderBottomRightRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
   },
-  profilePic: {
+  backButton: {
+    marginRight: 10,
+  },
+  headerAvatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    marginRight: 10,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)',
   },
-  chatHeader: {
+  headerTextContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  headerName: {
     fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+    fontWeight: '600',
+    color: '#FFF',
   },
-  loadingText: {
-    fontSize: 16,
+  headerStatus: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  messagesContainer: {
+    paddingHorizontal: 15,
+    paddingTop: 15,
+    paddingBottom: 80,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: 100,
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#888',
+    marginTop: 15,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    color: '#AAA',
+    marginTop: 5,
     textAlign: 'center',
-    marginTop: 20,
+    paddingHorizontal: 40,
   },
-  noMessages: {
-    fontSize: 16,
-    textAlign: 'center',
-    marginTop: 20,
-    color: '#999',
+  messageContainer: {
+    flexDirection: 'row',
+    marginVertical: 8,
+    maxWidth: width * 0.8,
   },
-  message: {
-    maxWidth: '80%',
-    padding: 10,
-    borderRadius: 100,
-    marginVertical: 5,
-  },
-  sentMessage: {
+  currentUserContainer: {
     alignSelf: 'flex-end',
-    backgroundColor: '#4CAF50',
   },
-  receivedMessage: {
+  otherUserContainer: {
     alignSelf: 'flex-start',
-    backgroundColor: '#ddd',
+  },
+  userAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 8,
+    alignSelf: 'flex-end',
+  },
+  messageBubble: {
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  currentUserBubble: {
+    backgroundColor: '#4A90E2',
+    borderTopRightRadius: 4,
+  },
+  otherUserBubble: {
+    backgroundColor: '#FFF',
+    borderTopLeftRadius: 4,
   },
   messageText: {
     fontSize: 16,
+    lineHeight: 22,
+  },
+  currentUserText: {
+    color: '#FFF',
+  },
+  otherUserText: {
     color: '#333',
   },
+  messageTime: {
+    fontSize: 10,
+    marginTop: 5,
+    textAlign: 'right',
+  },
+  currentUserTime: {
+    color: 'rgba(255,255,255,0.7)',
+  },
+  otherUserTime: {
+    color: '#999',
+  },
   inputContainer: {
-    flexDirection: 'row',
-    padding: 10,
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFF',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
     borderTopWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#EEE',
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   textInput: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F0F2F5',
     borderRadius: 25,
-    paddingHorizontal: 15,
-    borderWidth: 1,
-    borderColor: '#ddd',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    fontSize: 16,
+    maxHeight: 120,
     marginRight: 10,
   },
   sendButton: {
-    backgroundColor: '#4CAF50',
+    width: 50,
+    height: 50,
     borderRadius: 25,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
+    backgroundColor: '#6C63FF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  sendButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
+  disabledButton: {
+    backgroundColor: '#CCC',
   },
 });
 

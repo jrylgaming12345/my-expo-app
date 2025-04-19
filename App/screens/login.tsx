@@ -8,12 +8,19 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  ActivityIndicator,
+  Dimensions
 } from 'react-native';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { getFirestore, doc, getDoc } from 'firebase/firestore'; // Correct Firestore imports
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { auth } from '../../DataBases/firebaseConfig';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
+import { LinearGradient } from 'expo-linear-gradient';
+
+const { width } = Dimensions.get('window');
+
 const LoginPage = () => {
   const navigation = useNavigation();
   const [email, setEmail] = useState('');
@@ -23,161 +30,169 @@ const LoginPage = () => {
 
   const handleLogin = async () => {
     try {
-      setLoading(true); // Start loading
+      setLoading(true);
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-  
-      // Get Firestore instance
+
       const firestore = getFirestore();
-  
-      // Fetch user data from Firestore
       const userDoc = await getDoc(doc(firestore, 'users', user.uid));
-  
+
       if (!userDoc.exists()) {
-        console.error("User data not found in Firestore");
         Alert.alert('Error', 'User data not found');
         return;
       }
-  
+
       const userData = userDoc.data();
-      console.log("User Data:", userData);
-  
-      // Check if user has the required data
+
       if (!userData.role) {
-        console.error("User role is missing in Firestore");
         Alert.alert('Error', 'User role is missing');
         return;
       }
-  
-      // Navigate based on role
+
       const { role, isAdmin } = userData;
-      
-      if (isAdmin) {
-        console.log("Navigating to Admin Homepage");
-        navigation.navigate("adminHomepage");
-      } else if (role === "jobseeker") {
-        console.log("Navigating to Jobseeker Homepage (MainTabs)");
+
+      if (role === "jobseeker") {
         navigation.navigate("MainTabs2");
       } else if (role === "employer") {
-        console.log("Navigating to Employer Homepage");
         navigation.navigate("MainTabs");
       } else {
-        console.error("Invalid or missing role:", role);
         Alert.alert('Error', 'User role is not valid');
       }
-      
+
     } catch (error) {
-      console.error("Error during login:", error.message);
-      Alert.alert('Error', `An error occurred while logging in: ${error.message}`);
+      Alert.alert('Error', `Login failed: ${error.message}`);
     } finally {
-      setLoading(false); // Stop loading after attempt
+      setLoading(false);
     }
   };
-  
-  
-  
-  
 
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
-      Alert.alert('Success', 'You have successfully logged in with Google.');
       navigation.replace('MainTabs');
     } catch (error) {
-      console.error('Google login error:', error);
-      Alert.alert('Error', 'Failed to log in with Google. Please try again.');
+      Alert.alert('Error', 'Failed to log in with Google');
     }
   };
 
-  // Function to show the account type selection popup
   const handleCreateAccount = () => {
-    console.log("Handle create account pressed");  // Debugging line
     Alert.alert(
-      'Select Account Type',
-      'Please select what type of account you want to create:',
+      'Create Account',
+      'Select your account type:',
       [
         {
-          text: 'Jobseeker', 
-          onPress: () => {
-            console.log("Navigating to Jobseeker account creation");  // Debugging line
-            navigation.navigate('CreateAccount');
-          },
+          text: 'Jobseeker',
+          onPress: () => navigation.navigate('CreateAccount'),
         },
         {
           text: 'Employer',
-          onPress: () => {
-            console.log("Navigating to Employer account creation");  // Debugging line
-            navigation.navigate('CreateAccountEmployer');
-          },
+          onPress: () => navigation.navigate('CreateAccountEmployer'),
         },
         {
           text: 'Cancel',
           style: 'cancel',
         },
-      ],
-      { cancelable: true }
+      ]
     );
   };
-  
-  
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.inputContainer}>
-        <Text style={styles.label}>Email</Text>
-        <TextInput
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-          placeholder="Enter your email"
-          keyboardType="email-address"
-          autoCapitalize="none"
+      <LinearGradient
+        colors={['#4A90E2', '#3F51B5']}
+        style={styles.header}
+      >
+        <Image
+          source={require('../../assets/login-icon.png')}
+          style={styles.logo}
         />
+        <Text style={styles.welcomeText}>Welcome to HUSTLE HUB</Text>
+        <Text style={styles.subText}>Login to continue</Text>
+      </LinearGradient>
+
+      <View style={styles.formContainer}>
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Email Address</Text>
+          <View style={styles.inputWrapper}>
+            <Icon name="mail" size={20} color="#777" style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              placeholder="Enter your email"
+              placeholderTextColor="#999"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          </View>
+        </View>
+
+        <View style={styles.inputContainer}>
+          <Text style={styles.label}>Password</Text>
+          <View style={styles.inputWrapper}>
+            <Icon name="lock" size={20} color="#777" style={styles.inputIcon} />
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              placeholder="Enter your password"
+              placeholderTextColor="#999"
+            />
+            <TouchableOpacity
+              onPress={() => setShowPassword(!showPassword)}
+              style={styles.eyeButton}
+            >
+              <Icon
+                name={showPassword ? 'eye' : 'eye-off'}
+                size={20}
+                color="#777"
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
+          <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.loginButton}
+          onPress={handleLogin}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.loginButtonText}>Login</Text>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.dividerContainer}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>OR</Text>
+          <View style={styles.dividerLine} />
+        </View>
+
+        <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin}>
+          <Image
+            source={require('../screens/assets/google.png')}
+            style={styles.googleIcon}
+          />
+          <Text style={styles.googleButtonText}>Continue with Google</Text>
+        </TouchableOpacity>
+
+        <View style={styles.signupContainer}>
+          <Text style={styles.signupText}>Don't have an account?</Text>
+          <TouchableOpacity onPress={handleCreateAccount}>
+            <Text style={styles.signupLink}> Sign up</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-      <View style={styles.inputContainer}>
-  <Text style={styles.label}>Password</Text>
-  <View style={styles.inputWrapper}>
-    <TextInput
-      style={styles.input}
-      value={password}
-      onChangeText={setPassword}
-      secureTextEntry={!showPassword}
-      placeholder="Enter your password"
-    />
-    <TouchableOpacity
-      onPress={() => setShowPassword(!showPassword)}
-      style={styles.eyeButton}
-    >
-      <Icon
-        name={showPassword ? 'eye' : 'eye-off'}
-        size={24}
-        color="#000"
-      />
-    </TouchableOpacity>
-  </View>
-</View>
-
-
-      <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={loading}>
-        <Text style={styles.loginButtonText}>{loading ? 'Logging in...' : 'Login'}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin}>
-        <Text style={styles.googleButtonText}>Log in with Google</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => navigation.navigate('ForgotPassword')}>
-        <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
-      </TouchableOpacity>
-
-
-      <TouchableOpacity onPress={handleCreateAccount}>
-        <Text style={styles.createAccountText}>Don’t have an account? Create one here</Text>
-      </TouchableOpacity>
-
-
     </KeyboardAvoidingView>
   );
 };
@@ -185,84 +200,139 @@ const LoginPage = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    justifyContent: 'center',
     backgroundColor: '#fff',
+  },
+  header: {
+    height: 250,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderBottomLeftRadius: 30,
+    borderBottomRightRadius: 30,
+    paddingBottom: 30,
+  },
+  logo: {
+    width: 80,
+    height: 80,
+    marginBottom: 15,
+  },
+  welcomeText: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 5,
+  },
+  subText: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.8)',
+  },
+  formContainer: {
+    paddingHorizontal: 30,
+    marginTop: 30,
   },
   inputContainer: {
     marginBottom: 20,
   },
   label: {
-    fontSize: 16,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#555',
     marginBottom: 8,
-    color: '#333',
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 40,
-    padding: 12,
-    fontSize: 16,
-    color: '#333',
-  },
-  loginButton: {
-    padding: 15,
-    borderRadius: 40,
-    alignItems: 'center',
-    marginTop: 10,
-    borderWidth:2,
-    borderColor:'blue'
-  },
-  loginButtonText: {
-    color: 'blue',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  googleButton: {
-    padding: 15,
-    borderRadius: 40,
-    alignItems: 'center',
-    marginTop: 10,
-    borderWidth:2,
-    borderColor:'orange'
-  },
-  googleButtonText: {
-    color: 'black',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  forgotPasswordText: {
-    marginTop: 10,
-    textAlign: 'center',
-    color: '#007BFF',
-  },
-  createAccountText: {
-    marginTop: 20,
-    textAlign: 'center',
-    color: '#007BFF',
-    fontWeight: 'bold',
-  },
-  inputContainerp: {
-    marginBottom: 20,
+    marginLeft: 10,
   },
   inputWrapper: {
-    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 25,
+    paddingHorizontal: 15,
   },
-  inputp: {
+  inputIcon: {
+    marginRight: 10,
+  },
+  input: {
+    flex: 1,
     height: 50,
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    paddingLeft: 15,
-    paddingRight: 50, // Extra padding to avoid overlap with the eye icon
     fontSize: 16,
+    color: '#333',
   },
   eyeButton: {
-    position: 'absolute',
-    right: 15,
-    top: '50%',
-    transform: [{ translateY: -12 }], // Adjust to center the icon vertically
+    padding: 10,
+  },
+  forgotPasswordText: {
+    textAlign: 'right',
+    color: '#5D3FD3',
+    fontSize: 14,
+    marginBottom: 20,
+  },
+  loginButton: {
+    backgroundColor: '#4A90E2',
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+    shadowColor: '#5D3FD3',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  loginButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e0e0e0',
+  },
+  dividerText: {
+    width: 50,
+    textAlign: 'center',
+    color: '#999',
+    fontSize: 14,
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    marginBottom: 20,
+  },
+  googleIcon: {
+    width: 20,
+    height: 20,
+    marginRight: 10,
+  },
+  googleButtonText: {
+    color: '#555',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  signupContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 10,
+  },
+  signupText: {
+    color: '#777',
+    fontSize: 14,
+  },
+  signupLink: {
+    color: '#5D3FD3',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
 });
 
