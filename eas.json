@@ -9,10 +9,65 @@
       "distribution": "internal"
     },
     "preview": {
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      },
+      "distribution": "internal"
+    },
+    "production": {{
+  "cli": {
+    "version": ">= 13.4.2",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug",
+        "config": {
+          "googleMaps": {
+            "apiKey": "AIzaSyD3zCbepzaKPlYkAcelb8lg-OyeaidnD5A"
+          }
+        }
+      }
+    },
+    "preview": {
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease",
+        "config": {
+          "googleMaps": {
+            "apiKey": "$GOOGLE_MAPS_API_KEY"
+          }
+        }
+      },
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease",
+        "config": {
+          "googleMaps": {
+            "apiKey": "AIzaSyD3zCbepzaKPlYkAcelb8lg-OyeaidnD5A"
+          }
+        }
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
+      }
     },
     "release": {
       "android": {

@@ -21,9 +21,10 @@
     },
     "android": {
       "buildType": "apk",
+      "versionCode": 1,
       "config": {
         "googleMaps": {
-          "apiKey": "AIzaSyD3zCbepzaKPlYkAcelb8lg-OyeaidnD5A"
+          "apiKey": "$GOOGLE_MAPS_API_KEY"
         }
         
       },
@@ -42,13 +43,6 @@
       }
     },
 
-    "production": {
-      "android": {
-        "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease"
-      }
-    },
-    
     "owner": "jhon3424"
   }
 }
