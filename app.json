@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Hustle-Hub3",
-    "slug": "Hustle-Hub3",
+    "slug": "hustlehub",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -12,37 +12,35 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "supportsTablet": true,
       "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyD3zCbepzaKPlYkAcelb8lg-OyeaidnD5A"
-        }
-      },
-      "supportsTablet": true
+        "googleMapsApiKey": "AIzaSyBli3AUygVkjcacIkjXVUE2QdFYweBYK3M"
+      }
     },
     "android": {
-      "buildType": "apk",
-      "versionCode": 1,
-      "config": {
-        "googleMaps": {
-          "apiKey": "$GOOGLE_MAPS_API_KEY"
-        }
-        
-      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.jhon3424.HustleHub3"
+      "package": "com.jhon3424.HustleHub3",
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBli3AUygVkjcacIkjXVUE2QdFYweBYK3M"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "extra": {
       "eas": {
-        "projectId": "dc62eca9-f771-4f11-8279-53cbcd047ce3"
+        "projectId": "2297d201-f8e1-4114-9d39-1fbca156ab41"
       }
     },
-
-    "owner": "jhon3424"
+    "owner": "jrylexpo"
   }
 }

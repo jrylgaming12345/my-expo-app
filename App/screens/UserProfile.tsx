@@ -117,27 +117,51 @@ const UserProfile = ({ route, navigation }) => {
       Alert.alert('Error', 'You must be logged in to send a message.');
       return;
     }
-
+  
     try {
       const chatRef = collection(db, 'chats');
-      const participants = [currentUser.uid, userId];
-
-      const chatQuery = query(chatRef, where('participants', 'array-contains', currentUser.uid));
+      const participants = [currentUser.uid, userId].sort(); // Sort for consistent comparison
+  
+      // Query for existing chat between these exact two users
+      const chatQuery = query(
+        chatRef,
+        where('participants', 'array-contains', currentUser.uid)
+      );
+      
       const chatSnap = await getDocs(chatQuery);
-
-      let chatId;
-      if (!chatSnap.empty) {
-        chatId = chatSnap.docs[0].id;
+      let existingChat = null;
+  
+      // Check each chat to find one with exactly these two participants
+      chatSnap.forEach((doc) => {
+        const chatData = doc.data();
+        if (chatData.participants && 
+            chatData.participants.length === 2 &&
+            chatData.participants.includes(currentUser.uid) && 
+            chatData.participants.includes(userId)) {
+          existingChat = doc;
+        }
+      });
+  
+      if (existingChat) {
+        navigation.navigate('ChatScreen', { 
+          chatId: existingChat.id,
+          otherUserId: userId // Pass the other user's ID explicitly
+        });
       } else {
         const newChat = await addDoc(chatRef, {
           participants,
           createdAt: Timestamp.now(),
-          lastMessage: { text: '', createdAt: Timestamp.now() },
+          lastMessage: { 
+            text: 'Chat started', 
+            senderId: currentUser.uid,
+            createdAt: Timestamp.now() 
+          },
         });
-        chatId = newChat.id;
+        navigation.navigate('ChatScreen', { 
+          chatId: newChat.id,
+          otherUserId: userId // Pass the other user's ID explicitly
+        });
       }
-
-      navigation.navigate('ChatScreen', { chatId });
     } catch (error) {
       console.error('Error creating or opening chat room:', error);
       Alert.alert('Error', 'Unable to start a chat.');

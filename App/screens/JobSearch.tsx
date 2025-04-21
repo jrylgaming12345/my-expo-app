@@ -10,7 +10,7 @@ import {
   Image,
   ActivityIndicator
 } from "react-native";
-import { db } from "../../DataBases/firebaseConfig";
+import { db , auth } from "../../DataBases/firebaseConfig";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { useNavigation } from "@react-navigation/native";
 
@@ -78,18 +78,26 @@ const JobSearch = () => {
   const renderSearchItem = ({ item }) => {
     const user = item.type === "job" ? item.user : item;
     const isUserResult = item.type === "user";
-
+    const currentUser = auth.currentUser; // Add this line to get current user
+  
     return (
       <TouchableOpacity
         style={styles.postCard}
         onPress={() => {
-          navigation.navigate(
-            isUserResult ? "UserProfile" : "JobDetails",
-            { [isUserResult ? "userId" : "jobId"]: item.id }
-          );
+          if (isUserResult) {
+            // Check if this is the current user's profile
+            if (user.id === currentUser?.uid) {
+              navigation.navigate("Profile");
+            } else {
+              navigation.navigate("UserProfile", { userId: item.id });
+            }
+          } else {
+            navigation.navigate("JobDetails", { jobId: item.id });
+          }
         }}
         activeOpacity={0.8}
       >
+        {/* Rest of your render code remains the same */}
         {user && (
           <View style={styles.postHeader}>
             <Image
@@ -126,7 +134,7 @@ const JobSearch = () => {
             </Text>
           </>
         )}
-
+  
         {item.images && item.images.length > 0 && (
           <FlatList
             data={item.images}
