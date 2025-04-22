@@ -21,12 +21,15 @@ import MapView, { Marker } from 'react-native-maps';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
+import RNPickerSelect from 'react-native-picker-select';
 
 const PostJob = () => {
   const navigation = useNavigation();
   const [jobTitle, setJobTitle] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [companyName, setCompanyName] = useState('');
+  const [jobType, setJobType] = useState('');
+  const [requiredDocuments, setRequiredDocuments] = useState('');
   const [coordinates, setCoordinates] = useState({ 
     latitude: 10.5737, 
     longitude: 122.0310,
@@ -66,7 +69,7 @@ const PostJob = () => {
   };
 
   const uploadJob = async () => {
-    if (!jobTitle.trim() || !jobDescription.trim() || !companyName.trim()) {
+    if (!jobTitle.trim() || !jobDescription.trim() || !companyName.trim() || !jobType) {
       Alert.alert('Validation Error', 'Please fill out all required fields.');
       return;
     }
@@ -88,6 +91,8 @@ const PostJob = () => {
         title: jobTitle,
         description: jobDescription,
         companyName,
+        jobType,
+        requiredDocuments,
         coordinates,
         images: imageUrls,
         createdAt: serverTimestamp(),
@@ -105,6 +110,8 @@ const PostJob = () => {
       setJobTitle('');
       setJobDescription('');
       setCompanyName('');
+      setJobType('');
+      setRequiredDocuments('');
       setCoordinates({ 
         latitude: 10.5737, 
         longitude: 122.0310,
@@ -155,6 +162,23 @@ const PostJob = () => {
           </View>
 
           <View style={styles.inputCard}>
+            <Text style={styles.label}>Job Type*</Text>
+            <View style={styles.pickerContainer}>
+              <RNPickerSelect
+                onValueChange={(value: React.SetStateAction<string>) => setJobType(value)}
+                items={[
+                  { label: 'White Collar', value: 'white collar' },
+                  { label: 'Blue Collar', value: 'blue collar' },
+                  { label: 'Others', value: 'others' },
+                ]}
+                placeholder={{ label: 'Select job type...', value: null }}
+                style={pickerSelectStyles}
+                value={jobType}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputCard}>
             <Text style={styles.label}>Job Description*</Text>
             <TextInput
               style={[styles.input, styles.multiLineInput]}
@@ -174,6 +198,19 @@ const PostJob = () => {
               value={companyName}
               onChangeText={setCompanyName}
               placeholder="Enter company name"
+              placeholderTextColor="#999"
+            />
+          </View>
+
+          <View style={styles.inputCard}>
+            <Text style={styles.label}>Required Documents</Text>
+            <TextInput
+              style={[styles.input, styles.multiLineInput]}
+              value={requiredDocuments}
+              onChangeText={setRequiredDocuments}
+              multiline
+              numberOfLines={3}
+              placeholder="List the required documents (separated by commas if multiple)"
               placeholderTextColor="#999"
             />
           </View>
@@ -261,6 +298,27 @@ const PostJob = () => {
   );
 };
 
+const pickerSelectStyles = StyleSheet.create({
+  inputIOS: {
+    fontSize: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    color: '#333',
+    paddingRight: 30, // to ensure the text is never behind the icon
+  },
+  inputAndroid: {
+    fontSize: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+    color: '#333',
+    paddingRight: 30, // to ensure the text is never behind the icon
+  },
+});
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -327,6 +385,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginTop: 8,
+  },
+  pickerContainer: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
   },
   mapContainer: {
     height: 200,
