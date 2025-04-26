@@ -5,85 +5,191 @@ import {
   StyleSheet, 
   TouchableOpacity, 
   Alert, 
-  ScrollView 
+  ScrollView,
+  Image
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
 import auth from '@react-native-firebase/auth';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 type JobApplicationRouteProp = RouteProp<{
-  params: { jobTitle: string };
+  params: { 
+    jobTitle: string;
+    companyName?: string;
+    requiredDocuments?: string;
+  };
 }, 'params'>;
 
 const JobApplication = () => {
   const route = useRoute<JobApplicationRouteProp>();
   const navigation = useNavigation();
-  const { jobTitle } = route.params;
+  const { jobTitle, companyName, requiredDocuments } = route.params;
 
   const [documents, setDocuments] = useState<any[]>([]);
-  const [selectedDocument, setSelectedDocument] = useState<string | null>(null); // State for selected document
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleDocumentUpload = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*', // Allow all document types
-        copyToCacheDirectory: true,
-        multiple: false, // Only one document at a time
-      });
-  
-      if (result.type === 'success') {
-        if (documents.length >= 5) {
-          Alert.alert('Limit Reached', 'You can upload up to 5 documents only.');
-          return;
-        }
-  
-        const fileUri = result.uri;
-        const fileName = result.name;
-        const fileType = result.mimeType;
-  
-        if (!fileUri) {
-          Alert.alert('Error', 'Document URI is invalid');
-          return;
-        }
-  
-        // Upload the document to Firebase Storage
-        const storageRef = storage().ref(`jobDocuments/${auth().currentUser?.uid}/${fileName}`);
-        await storageRef.putFile(fileUri);
-        const fileUrl = await storageRef.getDownloadURL(); // Get the URL of the uploaded document
-  
-        // Add the document to state
-        setDocuments((prevDocuments) => {
-          const updatedDocuments = [...prevDocuments, { name: fileName, uri: fileUrl, type: fileType }];
-          if (updatedDocuments.length === 1) {
-            setSelectedDocument(fileName); // If it's the first document, set it as selected
-          }
-          return updatedDocuments;
-        });
-        Alert.alert('Document Selected', `File: ${fileName}`);
+  // Parse required documents if they exist
+  const requiredDocsArray = requiredDocuments 
+    ? requiredDocuments.split(/[,;\n]/).map(doc => doc.trim()).filter(doc => doc)
+    : [];
+
+    const handleDocumentUpload = async () => {
+      if (documents.length >= 5) {
+        Alert.alert('Limit Reached', 'You can upload up to 5 documents only.');
+        return;
       }
-    } catch (error) {
-      console.log('Error uploading document:', error);
-      Alert.alert('Error', 'There was an error picking the document.');
-    }
-  };
-  
-
-  const handleRemoveDocument = (index: number) => {
-    setDocuments(documents.filter((_, i) => i !== index));
-    if (documents.length === 1) {
-      setSelectedDocument(null); // Clear selected document if last one is removed
-    }
-  };
+    
+      try {
+        setIsUploading(true);
+        const result = await DocumentPicker.getDocumentAsync({
+          type: '*/*',
+          copyToCacheDirectory: true,
+          multiple: false,
+        });
+    
+        console.log('Document picker result:', result); // Keep this for debugging
+    
+        // Check if the picker was canceled
+        if (result.canceled) {
+          console.log('Document picker was canceled');
+          setIsUploading(false);
+          return;
+        }
+    
+        // Verify we have assets
+        if (!result.assets || result.assets.length === 0) {
+          console.log('No assets in document picker result');
+          Alert.alert('Error', 'No document was selected');
+          setIsUploading(false);
+          return;
+        }
+    
+        const asset = result.assets[0];
+        
+        // Ensure we have the required file information
+        if (!asset.uri || !asset.name) {
+          console.log('Incomplete document information:', asset);
+          Alert.alert('Error', 'Selected document is missing required information');
+          setIsUploading(false);
+          return;
+        }
+    
+        const fileUri = asset.uri;
+        const fileName = asset.name;
+        const fileType = asset.mimeType || 'application/octet-stream';
+        const fileSize = asset.size || 0;
+    
+        // Create a reference to the file in Firebase Storage
+        const fileExtension = fileName.split('.').pop();
+        const uniqueFileName = `${Date.now()}.${fileExtension}`;
+        const storageRef = storage().ref(`jobDocuments/${auth().currentUser?.uid}/${uniqueFileName}`);
+    
+        // Show uploading indicator
+        Alert.alert('Uploading', `Please wait while we upload ${fileName}...`);
+    
+        // First add the document to state (but mark as pending upload)
+        const pendingDocument = { 
+          name: fileName, 
+          uri: fileUri, 
+          type: fileType,
+          size: (fileSize / 1024).toFixed(1) + ' KB',
+          isUploading: true
+        };
+        setDocuments(prev => [...prev, pendingDocument]);
+    
+        // Upload the file
+        const uploadTask = storageRef.putFile(fileUri);
+    
+        uploadTask.on('state_changed', 
+          (snapshot) => {
+            // Track upload progress if needed
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            console.log(`Upload is ${progress}% done`);
+          },
+          (error) => {
+            console.log('Upload error:', error);
+            // Remove the pending document if upload fails
+            setDocuments(prev => prev.filter(doc => doc.uri !== fileUri));
+            Alert.alert('Error', 'Failed to upload document');
+            setIsUploading(false);
+          },
+          async () => {
+            try {
+              const fileUrl = await storageRef.getDownloadURL();
+              
+              // Update the document in state with the final URL
+              setDocuments(prev => prev.map(doc => 
+                doc.uri === fileUri 
+                  ? { 
+                      ...doc, 
+                      uri: fileUrl, 
+                      isUploading: false,
+                      storagePath: storageRef.fullPath 
+                    } 
+                  : doc
+              ));
+              
+              Alert.alert('Success', `${fileName} uploaded successfully!`);
+            } catch (error) {
+              console.log('Error getting download URL:', error);
+              setDocuments(prev => prev.filter(doc => doc.uri !== fileUri));
+              Alert.alert('Error', 'Failed to get document URL');
+            } finally {
+              setIsUploading(false);
+            }
+          }
+        );
+      } catch (error) {
+        console.log('Error picking document:', error);
+        Alert.alert('Error', 'There was an error selecting the document.');
+        setIsUploading(false);
+      }
+    };
+    
+    const handleRemoveDocument = async (index: number) => {
+      Alert.alert(
+        'Remove Document',
+        'Are you sure you want to remove this document?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Remove', 
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                const docToRemove = documents[index];
+                
+                // Delete from Firebase Storage if path exists
+                if (docToRemove.storagePath) {
+                  const fileRef = storage().ref(docToRemove.storagePath);
+                  await fileRef.delete();
+                }
+                
+                // Remove from local state
+                setDocuments(documents.filter((_, i) => i !== index));
+              } catch (error) {
+                console.log('Error removing document:', error);
+                Alert.alert('Error', 'Failed to remove document from storage');
+              }
+            }
+          }
+        ]
+      );
+    };
 
   const handleSubmitApplication = async () => {
     if (documents.length < 1) {
-      Alert.alert('Error', 'Please upload at least one document.');
+      Alert.alert('Required', 'Please upload at least one document.');
       return;
     }
 
     try {
+      setIsSubmitting(true);
       const currentUser = auth().currentUser;
 
       if (!currentUser) {
@@ -93,59 +199,148 @@ const JobApplication = () => {
 
       const applicationData = {
         jobTitle,
-        documents: documents.map((doc) => ({
+        companyName: companyName || 'N/A',
+        documents: documents.map(doc => ({
           name: doc.name,
-          uri: doc.uri,  // Store the document URL in Firestore
+          uri: doc.uri,
+          type: doc.type,
+          size: doc.size
         })),
         userId: currentUser.uid,
+        status: 'submitted',
         createdAt: firestore.FieldValue.serverTimestamp(),
       };
 
       await firestore().collection('jobApplications').add(applicationData);
 
-      Alert.alert('Application Submitted', 'Your job application has been submitted successfully!');
-      navigation.goBack();
+      Alert.alert(
+        'Application Submitted', 
+        'Your application has been received!',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
     } catch (error) {
       console.error('Error saving application: ', error);
-      Alert.alert('Error', 'There was an error submitting your application. Please try again later.');
+      Alert.alert('Error', 'There was an error submitting your application.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  const getFileIcon = (type: string) => {
+    if (!type) return 'insert-drive-file';
+    if (type.includes('pdf')) return 'picture-as-pdf';
+    if (type.includes('image')) return 'image';
+    if (type.includes('word')) return 'description';
+    if (type.includes('excel')) return 'grid-on';
+    if (type.includes('zip')) return 'folder-zip';
+    return 'insert-drive-file';
+  };
+
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Apply for {jobTitle}</Text>
+    <ScrollView 
+      contentContainerStyle={styles.container}
+      showsVerticalScrollIndicator={false}
+    >
+      <View style={styles.header}>
+        <Text style={styles.jobTitle}>{jobTitle}</Text>
+        {companyName && <Text style={styles.companyName}>{companyName}</Text>}
+      </View>
 
-      {/* Document Picker */}
-      <Text style={styles.sectionTitle}>Required Documents:</Text>
-      <TouchableOpacity style={styles.uploadButton} onPress={handleDocumentUpload}>
-        <Text style={styles.uploadButtonText}>
-          {documents.length >= 5 ? 'Limit Reached' : 'Upload Document'}
-        </Text>
-      </TouchableOpacity>
-
-      {/* Display the selected document's name */}
-      {selectedDocument && (
-        <View style={styles.selectedDocument}>
-          <Text style={styles.selectedDocumentText}>Selected Document: {selectedDocument}</Text>
+      {requiredDocsArray.length > 0 && (
+        <View style={styles.requirementsSection}>
+          <Text style={styles.sectionTitle}>Required Documents</Text>
+          <View style={styles.requirementsList}>
+            {requiredDocsArray.map((doc, index) => (
+              <View key={index} style={styles.requirementItem}>
+                <Icon name="check-circle" size={18} color="#4CAF50" />
+                <Text style={styles.requirementText}>{doc}</Text>
+              </View>
+            ))}
+          </View>
         </View>
       )}
 
-      {/* Display Uploaded Documents */}
-      {documents.map((doc, index) => (
-        <View key={index} style={styles.documentItem}>
-          <Text style={styles.documentName}>{doc.name}</Text>
-          <TouchableOpacity
-            style={styles.removeButton}
-            onPress={() => handleRemoveDocument(index)}
-          >
-            <Text style={styles.removeButtonText}>Remove</Text>
-          </TouchableOpacity>
-        </View>
-      ))}
+      <View style={styles.uploadSection}>
+        <Text style={styles.sectionTitle}>Your Documents</Text>
+        <Text style={styles.uploadHint}>
+          Upload your files (PDF, DOC, JPG, etc.) - Max 5 files
+        </Text>
 
-      {/* Submit Button */}
-      <TouchableOpacity style={styles.submitButton} onPress={handleSubmitApplication}>
-        <Text style={styles.submitButtonText}>Submit Application</Text>
+        <TouchableOpacity 
+          style={styles.uploadButton}
+          onPress={handleDocumentUpload}
+          disabled={isUploading || documents.length >= 5}
+        >
+          <LinearGradient
+            colors={['#6C63FF', '#4A42E8']}
+            style={styles.uploadButtonGradient}
+          >
+            <Icon 
+              name="cloud-upload" 
+              size={24} 
+              color="#FFF" 
+              style={styles.uploadIcon}
+            />
+            <Text style={styles.uploadButtonText}>
+              {isUploading ? 'Uploading...' : 'Select Document'}
+            </Text>
+          </LinearGradient>
+        </TouchableOpacity>
+
+        <Text style={styles.documentsCount}>
+          {documents.length} of 5 documents uploaded
+        </Text>
+      </View>
+
+      {documents.length > 0 && (
+        <View style={styles.documentsList}>
+          {documents.map((doc, index) => (
+            <View key={index} style={styles.documentCard}>
+              <View style={styles.documentInfo}>
+                <Icon 
+                  name={getFileIcon(doc.type)} 
+                  size={28} 
+                  color="#6C63FF" 
+                  style={styles.documentIcon}
+                />
+                <View style={styles.documentDetails}>
+                  <Text 
+                    style={styles.documentName}
+                    numberOfLines={1}
+                    ellipsizeMode="middle"
+                  >
+                    {doc.name}
+                  </Text>
+                  <Text style={styles.documentMeta}>
+                    {doc.type} • {doc.size}
+                  </Text>
+                </View>
+              </View>
+              <TouchableOpacity
+                style={styles.removeButton}
+                onPress={() => handleRemoveDocument(index)}
+              >
+                <Icon name="delete" size={20} color="#FF5252" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <TouchableOpacity 
+        style={styles.submitButton}
+        onPress={handleSubmitApplication}
+        disabled={isSubmitting || documents.length === 0}
+      >
+        <LinearGradient
+          colors={['#6C63FF', '#4A42E8']}
+          style={styles.submitButtonGradient}
+        >
+          <Text style={styles.submitButtonText}>
+            {isSubmitting ? 'Submitting...' : 'Submit Application'}
+          </Text>
+          <Icon name="send" size={20} color="#FFF" style={styles.submitIcon} />
+        </LinearGradient>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -154,78 +349,157 @@ const JobApplication = () => {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F5F7FB',
     padding: 20,
+    paddingBottom: 40,
   },
-  title: {
-    color: '#333',
+  header: {
+    marginBottom: 25,
+    alignItems: 'center',
+  },
+  jobTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    marginBottom: 20,
-    marginTop: 30,
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 5,
+  },
+  companyName: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
   },
   sectionTitle: {
-    color: '#333',
     fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
     marginBottom: 10,
+  },
+  requirementsSection: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  requirementsList: {
+    marginTop: 8,
+  },
+  requirementItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  requirementText: {
+    fontSize: 15,
+    color: '#555',
+    marginLeft: 8,
+  },
+  uploadSection: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  uploadHint: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 15,
   },
   uploadButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 12,
     borderRadius: 8,
-    alignItems: 'center',
+    overflow: 'hidden',
     marginBottom: 10,
   },
+  uploadButtonGradient: {
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadIcon: {
+    marginRight: 10,
+  },
   uploadButtonText: {
-    color: '#fff',
+    color: '#FFF',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
-  selectedDocument: {
-    marginTop: 10,
-    backgroundColor: '#f1f1f1',
-    padding: 10,
-    borderRadius: 8,
+  documentsCount: {
+    fontSize: 13,
+    color: '#666',
+    textAlign: 'center',
   },
-  selectedDocumentText: {
-    color: '#333',
-    fontSize: 14,
-    fontWeight: 'bold',
+  documentsList: {
+    marginBottom: 20,
   },
-  documentItem: {
+  documentCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#f1f1f1',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  documentInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  documentIcon: {
+    marginRight: 12,
+  },
+  documentDetails: {
+    flex: 1,
   },
   documentName: {
+    fontSize: 15,
+    fontWeight: '500',
     color: '#333',
-    fontSize: 14,
+    marginBottom: 3,
+  },
+  documentMeta: {
+    fontSize: 12,
+    color: '#888',
   },
   removeButton: {
-    backgroundColor: '#f44336',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-  },
-  removeButtonText: {
-    color: '#fff',
-    fontSize: 12,
+    padding: 8,
+    marginLeft: 10,
   },
   submitButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 15,
     borderRadius: 8,
+    overflow: 'hidden',
+    marginTop: 10,
+  },
+  submitButtonGradient: {
+    paddingVertical: 16,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
   },
   submitButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
+    color: '#FFF',
+    fontSize: 17,
+    fontWeight: '600',
+    marginRight: 10,
+  },
+  submitIcon: {
+    marginLeft: 5,
   },
 });
 

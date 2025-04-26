@@ -181,7 +181,7 @@ const JobDetails = () => {
             colors={['#6C63FF', '#4A42E8']}
             style={styles.headerGradient}
           >
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => navigation.goBack()}
               style={styles.backButton}
             >
@@ -211,7 +211,7 @@ const JobDetails = () => {
               </View>
             </View>
             <View style={styles.userContactContainer}>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={styles.contactButton}
                 onPress={handleStartChat}
                 disabled={isLoading}
@@ -219,7 +219,7 @@ const JobDetails = () => {
                 <Icon name="message" size={18} color="#FFF" />
                 <Text style={styles.contactButtonText}>Message</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
+              <TouchableOpacity
                 style={[styles.contactButton, styles.callButton]}
                 onPress={handleCallEmployer}
               >
@@ -229,33 +229,29 @@ const JobDetails = () => {
             </View>
           </View>
         );
-      case "details":
-        return (
-          <View style={styles.detailsContainer}>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Job Description</Text>
-              <Text style={styles.sectionContent}>{description}</Text>
-            </View>
-            
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Job Type</Text>
-              <View style={styles.jobTypeBadge}>
-                <Text style={styles.jobTypeText}>{jobType}</Text>
+        case "details":
+          return (
+            <View style={styles.detailsContainer}>
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Job Description</Text>
+                <Text style={styles.sectionContent}>{description}</Text>
+              </View>
+        
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Job Type</Text>
+                <View style={styles.jobTypeBadge}>
+                  <Text style={styles.jobTypeText}>{jobType}</Text>
+                </View>
+              </View>
+        
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Required Documents</Text>
+                <Text style={styles.sectionContent}>
+                  {requiredDocuments || "No documents required"}
+                </Text>
               </View>
             </View>
-            
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Required Documents</Text>
-              <View style={styles.documentsContainer}>
-                {requiredDocuments?.map((doc, index) => (
-                  <View key={index} style={styles.documentBadge}>
-                    <Text style={styles.documentText}>{doc}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-          </View>
-        );
+          );
       case "images":
         return images?.length > 0 ? (
           <View style={styles.imagesContainer}>
@@ -266,7 +262,7 @@ const JobDetails = () => {
               horizontal
               showsHorizontalScrollIndicator={false}
               renderItem={({ item }) => (
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => openImageModal(item)}
                   style={styles.imageWrapper}
                 >
@@ -345,7 +341,7 @@ const JobDetails = () => {
         renderItem={renderItem}
         contentContainerStyle={styles.listContent}
       />
-      
+
       <Modal
         visible={modalVisible}
         transparent

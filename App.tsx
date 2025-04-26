@@ -24,9 +24,9 @@ import JobSearch from "./App/screens/JobSearch";
 import JobApplication from "./App/screens/JobApplication";
 import MyMap from "./App/screens/MyMap";
 import ProfileScreen from "./App/screens/ProfileScreen";
-import UploadProfilePicture from "./App/screens/UploadProfilePicture";
 import Notifications from "./App/screens/Notifications";
 import UserProfile from "./App/screens/UserProfile";
+import RoleSelection from "./App/screens/RoleSelection";
 import CreateAccountEmployer from "./App/screens/CreateAccountEmployer";
 
 // Create Navigators
@@ -207,6 +207,7 @@ const App = () => {
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Login" component={Login} />
+        <Stack.Screen name="RoleSelection" component={RoleSelection} />
 
         <Stack.Screen name="MainTabs" options={{ headerShown: false }}>
           {() => <MainTabs />}
@@ -223,10 +224,6 @@ const App = () => {
         <Stack.Screen name="JobDetails" component={JobDetails} />
         <Stack.Screen name="JobApplication" component={JobApplication} />
         <Stack.Screen name="ChatScreen" component={ChatScreen} />
-        <Stack.Screen
-          name="UploadProfilePicture"
-          component={UploadProfilePicture}
-        />
         <Stack.Screen name="Notifications" component={Notifications} />
         <Stack.Screen name="UserProfile" component={UserProfile} />
         <Stack.Screen name="Profile" component={ProfileScreen} />

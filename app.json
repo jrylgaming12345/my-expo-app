@@ -2,10 +2,17 @@
   "expo": {
     "name": "Hustle-Hub3",
     "slug": "hustlehub",
+    "scheme": "hustlehub",
+    "owner": "jrylexpo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "auth": {
+      "google": {
+        "redirectUri": "https://auth.expo.io/@jrylexpo/hustlehub"
+      }
+    },
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -37,10 +44,10 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
+      "googleClientId": "49295683464-96pvs544t9t3g3hit55dlqva4lq894jh.apps.googleusercontent.com",
       "eas": {
         "projectId": "2297d201-f8e1-4114-9d39-1fbca156ab41"
       }
-    },
-    "owner": "jrylexpo"
+    }
   }
 }

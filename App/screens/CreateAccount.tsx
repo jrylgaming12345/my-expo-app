@@ -27,12 +27,41 @@ import 'react-native-get-random-values';
 
 const { width } = Dimensions.get('window');
 
+// Sample Philippine address data (free to use)
+const PHILIPPINE_PROVINCES = [
+  'Metro Manila', 'Abra', 'Agusan del Norte', 'Agusan del Sur', 'Aklan',
+  'Albay', 'Antique', 'Apayao', 'Aurora', 'Basilan', 'Bataan', 'Batanes',
+  'Batangas', 'Benguet', 'Biliran', 'Bohol', 'Bukidnon', 'Bulacan', 'Cagayan',
+  'Camarines Norte', 'Camarines Sur', 'Camiguin', 'Capiz', 'Catanduanes',
+  'Cavite', 'Cebu', 'Cotabato', 'Davao de Oro', 'Davao del Norte', 'Davao del Sur',
+  'Davao Occidental', 'Davao Oriental', 'Dinagat Islands', 'Eastern Samar',
+  'Guimaras', 'Ifugao', 'Ilocos Norte', 'Ilocos Sur', 'Iloilo', 'Isabela',
+  'Kalinga', 'La Union', 'Laguna', 'Lanao del Norte', 'Lanao del Sur',
+  'Leyte', 'Maguindanao', 'Marinduque', 'Masbate', 'Misamis Occidental',
+  'Misamis Oriental', 'Mountain Province', 'Negros Occidental', 'Negros Oriental',
+  'Northern Samar', 'Nueva Ecija', 'Nueva Vizcaya', 'Occidental Mindoro',
+  'Oriental Mindoro', 'Palawan', 'Pampanga', 'Pangasinan', 'Quezon', 'Quirino',
+  'Rizal', 'Romblon', 'Samar', 'Sarangani', 'Siquijor', 'Sorsogon', 'South Cotabato',
+  'Southern Leyte', 'Sultan Kudarat', 'Sulu', 'Surigao del Norte', 'Surigao del Sur',
+  'Tarlac', 'Tawi-Tawi', 'Zambales', 'Zamboanga del Norte', 'Zamboanga del Sur',
+  'Zamboanga Sibugay'
+];
+
+const METRO_MANILA_CITIES = [
+  'Caloocan', 'Las Piñas', 'Makati', 'Malabon', 'Mandaluyong',
+  'Manila', 'Marikina', 'Muntinlupa', 'Navotas', 'Parañaque',
+  'Pasay', 'Pasig', 'Quezon City', 'San Juan', 'Taguig', 'Valenzuela'
+];
+
 const CreateAccount = () => {
   const navigation = useNavigation();
   const [formData, setFormData] = useState({
     fullName: '',
     gender: '',
-    address: '',
+    street: '',
+    province: '',
+    city: '',
+    barangay: '',
     birthdate: '',
     phoneNumber: '',
     email: '',
@@ -118,8 +147,11 @@ const CreateAccount = () => {
     if (!validateForm()) return;
     
     setLoading(true);
-    const { fullName, address, email, password, professionalHeadline, 
-            education, workExperience, skills, username } = formData;
+    const { fullName, street, province, city, barangay, email, password, 
+            professionalHeadline, education, workExperience, skills, username } = formData;
+    
+    // Construct full address
+    const address = `${street}, ${barangay}, ${city}, ${province}, Philippines`;
   
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -140,6 +172,11 @@ const CreateAccount = () => {
         uid: user.uid,
         fullName,
         address,
+        street,
+        province,
+        city,
+        barangay,
+        country: 'Philippines',
         email,
         professionalHeadline,
         education,
@@ -234,12 +271,64 @@ const CreateAccount = () => {
               </Picker>
             </View>
 
-            <Text style={styles.label}>Address</Text>
+            <Text style={styles.label}>Street Address*</Text>
             <TextInput
-              placeholder="Enter your full address"
+              placeholder="House #, Street, Building"
               style={styles.input}
-              value={formData.address}
-              onChangeText={(value) => handleInputChange('address', value)}
+              value={formData.street}
+              onChangeText={(value) => handleInputChange('street', value)}
+            />
+
+            <Text style={styles.label}>Province*</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={formData.province}
+                style={styles.picker}
+                onValueChange={(itemValue) => handleInputChange('province', itemValue)}
+              >
+                <Picker.Item label="Select Province" value="" />
+                {PHILIPPINE_PROVINCES.map((province) => (
+                  <Picker.Item key={province} label={province} value={province} />
+                ))}
+              </Picker>
+            </View>
+
+            {formData.province === 'Metro Manila' && (
+              <>
+                <Text style={styles.label}>City*</Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={formData.city}
+                    style={styles.picker}
+                    onValueChange={(itemValue) => handleInputChange('city', itemValue)}
+                  >
+                    <Picker.Item label="Select City" value="" />
+                    {METRO_MANILA_CITIES.map((city) => (
+                      <Picker.Item key={city} label={city} value={city} />
+                    ))}
+                  </Picker>
+                </View>
+              </>
+            )}
+
+            {formData.province && formData.province !== 'Metro Manila' && (
+              <>
+                <Text style={styles.label}>City/Municipality*</Text>
+                <TextInput
+                  placeholder="Enter your city/municipality"
+                  style={styles.input}
+                  value={formData.city}
+                  onChangeText={(value) => handleInputChange('city', value)}
+                />
+              </>
+            )}
+
+            <Text style={styles.label}>Barangay*</Text>
+            <TextInput
+              placeholder="Enter your barangay"
+              style={styles.input}
+              value={formData.barangay}
+              onChangeText={(value) => handleInputChange('barangay', value)}
             />
           </View>
         );
@@ -490,6 +579,7 @@ const CreateAccount = () => {
   );
 };
 
+// ... (keep all your existing styles)
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -512,7 +602,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
   },
-
   backButton: {
     marginRight: 15,
   },
@@ -604,6 +693,43 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderWidth: 1,
     borderColor: '#E0E0E0',
+  },
+  addressInput: {
+    backgroundColor: '#FFF',
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 5,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    height: 50,
+  },
+  addressList: {
+    backgroundColor: '#FFF',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    marginTop: 5,
+  },
+  addressDescription: {
+    fontSize: 14,
+    color: '#333',
+  },
+  addressRow: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  manualAddressButton: {
+    marginBottom: 15,
+    alignItems: 'center',
+  },
+  manualAddressText: {
+    color: '#4A90E2',
+    fontSize: 14,
+    fontWeight: '600',
   },
   dateText: {
     color: '#333',

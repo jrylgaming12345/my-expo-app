@@ -21,7 +21,7 @@ import MapView, { Marker } from 'react-native-maps';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
-import RNPickerSelect from 'react-native-picker-select';
+import { Picker } from '@react-native-picker/picker';
 
 const PostJob = () => {
   const navigation = useNavigation();
@@ -162,21 +162,21 @@ const PostJob = () => {
           </View>
 
           <View style={styles.inputCard}>
-            <Text style={styles.label}>Job Type*</Text>
-            <View style={styles.pickerContainer}>
-              <RNPickerSelect
-                onValueChange={(value: React.SetStateAction<string>) => setJobType(value)}
-                items={[
-                  { label: 'White Collar', value: 'white collar' },
-                  { label: 'Blue Collar', value: 'blue collar' },
-                  { label: 'Others', value: 'others' },
-                ]}
-                placeholder={{ label: 'Select job type...', value: null }}
-                style={pickerSelectStyles}
-                value={jobType}
-              />
-            </View>
+          <Text style={styles.label}>Job Type*</Text>
+          <View style={styles.pickerContainer}>
+            <Picker
+              selectedValue={jobType}
+              onValueChange={(itemValue) => setJobType(itemValue)}
+              style={styles.picker}
+              dropdownIconColor="#999"
+            >
+              <Picker.Item label="Select job type..." value="" />
+              <Picker.Item label="White Collar" value="white collar" />
+              <Picker.Item label="Blue Collar" value="blue collar" />
+              <Picker.Item label="Others" value="others" />
+            </Picker>
           </View>
+        </View>
 
           <View style={styles.inputCard}>
             <Text style={styles.label}>Job Description*</Text>

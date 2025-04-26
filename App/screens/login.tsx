@@ -1,25 +1,30 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  Image,
-  ActivityIndicator,
-  Dimensions
+import React, { useState, useEffect } from 'react';
+import * as WebBrowser from 'expo-web-browser';
+import * as Google from 'expo-auth-session/providers/google';
+import { 
+  View, 
+  Text, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  Alert, 
+  KeyboardAvoidingView, 
+  Platform, 
+  Image, 
+  ActivityIndicator, 
+  Dimensions 
 } from 'react-native';
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithCredential, signInWithEmailAndPassword } from 'firebase/auth';
 import { getFirestore, doc, getDoc } from 'firebase/firestore';
 import { auth } from '../../DataBases/firebaseConfig';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/Feather';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const { width } = Dimensions.get('window');
+const redirectUri = 'https://auth.expo.io/@jrylexpo/hustlehub';
+console.log("Redirect URI:", redirectUri);
+
+WebBrowser.maybeCompleteAuthSession();
 
 const LoginPage = () => {
   const navigation = useNavigation();
@@ -27,6 +32,14 @@ const LoginPage = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const [request, response, promptAsync] = Google.useAuthRequest({
+    androidClientId: '49295683464-96pvs544t9t3g3hit55dlqva4lq894jh.apps.googleusercontent.com',
+    iosClientId: '49295683464-96pvs544t9t3g3hit55dlqva4lq894jh.apps.googleusercontent.com',
+    expoClientId: '49295683464-96pvs544t9t3g3hit55dlqva4lq894jh.apps.googleusercontent.com',
+    redirectUri:  redirectUri,
+    scopes: ['profile', 'email'],
+  });
 
   const handleLogin = async () => {
     try {
@@ -66,13 +79,48 @@ const LoginPage = () => {
     }
   };
 
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const { id_token } = response.params;
+      const credential = GoogleAuthProvider.credential(id_token);
+      
+      setLoading(true);
+      signInWithCredential(auth, credential)
+        .then(async (userCredential) => {
+          const user = userCredential.user;
+          const firestore = getFirestore();
+          const userDoc = await getDoc(doc(firestore, 'users', user.uid));
+
+          if (!userDoc.exists()) {
+            navigation.navigate('RoleSelection', { userId: user.uid });
+          } else {
+            const userData = userDoc.data();
+            if (userData.role === "jobseeker") {
+              navigation.replace('MainTabs2');
+            } else if (userData.role === "employer") {
+              navigation.replace('MainTabs');
+            } else {
+              Alert.alert('Error', 'Invalid user role');
+            }
+          }
+        })
+        .catch((error) => {
+          Alert.alert('Login failed', error.message);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    } else if (response?.type === 'error') {
+      Alert.alert('Authentication error', response.error.message);
+    }
+  }, [response]);
+
   const handleGoogleLogin = async () => {
-    const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
-      navigation.replace('MainTabs');
+      await promptAsync();
     } catch (error) {
-      Alert.alert('Error', 'Failed to log in with Google');
+      Alert.alert('Error', 'Failed to initiate Google login');
     }
   };
 
@@ -96,6 +144,14 @@ const LoginPage = () => {
       ]
     );
   };
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4A90E2" />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -127,6 +183,7 @@ const LoginPage = () => {
               placeholderTextColor="#999"
               keyboardType="email-address"
               autoCapitalize="none"
+              autoCorrect={false}
             />
           </View>
         </View>
@@ -142,6 +199,8 @@ const LoginPage = () => {
               secureTextEntry={!showPassword}
               placeholder="Enter your password"
               placeholderTextColor="#999"
+              autoCapitalize="none"
+              autoCorrect={false}
             />
             <TouchableOpacity
               onPress={() => setShowPassword(!showPassword)}
@@ -165,11 +224,7 @@ const LoginPage = () => {
           onPress={handleLogin}
           disabled={loading}
         >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.loginButtonText}>Login</Text>
-          )}
+          <Text style={styles.loginButtonText}>Login</Text>
         </TouchableOpacity>
 
         <View style={styles.dividerContainer}>
@@ -178,9 +233,13 @@ const LoginPage = () => {
           <View style={styles.dividerLine} />
         </View>
 
-        <TouchableOpacity style={styles.googleButton} onPress={handleGoogleLogin}>
+        <TouchableOpacity 
+          style={styles.googleButton} 
+          onPress={handleGoogleLogin}
+          disabled={!request}
+        >
           <Image
-            source={require('../screens/assets/google.png')}
+            source={require('../../assets/google.png')}
             style={styles.googleIcon}
           />
           <Text style={styles.googleButtonText}>Continue with Google</Text>
@@ -200,6 +259,12 @@ const LoginPage = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#fff',
   },
   header: {
