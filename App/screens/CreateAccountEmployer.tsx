@@ -27,12 +27,119 @@ import 'react-native-get-random-values';
 
 const { width } = Dimensions.get('window');
 
+// Sample data for Antique province
+const ANTIQUE_MUNICIPALITIES = [
+  'San Jose de Buenavista',
+  'Anini-y',
+  'Barbaza',
+  'Belison',
+  'Bugasong',
+  'Caluya',
+  'Culasi',
+  'Hamtic',
+  'Laua-an',
+  'Libertad',
+  'Pandan',
+  'Patnongon',
+  'San Remigio',
+  'Sebaste',
+  'Sibalom',
+  'Tibiao',
+  'Tobias Fornier',
+  'Valderrama'
+];
+
+// Sample barangays by municipality (just a few samples)
+const BARANGAYS_BY_MUNICIPALITY = {
+  'Anini-y': [
+'Badiang', 'Bagtason', 'Banawan', 'Bayo', 'Buenavista', 'Cabiawan', 'Camancijan', 'Carnate', 'Cubay Norte', 'Cubay Sur', 'Dangcalan', 'Igdagmay', 'Igpanolong', 'Igtuba', 'Magdalena', 'Nasuli C', 'San Francisco', 'San Juan', 'San Pedro', 'San Ramon', 'San Roque', 'Santo Rosario', 'Tagaytay', 'Talisay', 'Tinindugan'
+  ],
+  'Barbaza': [
+   'Alojipan', 'Bagumbayan', 'Balatbat', 'Binangbang', 'Bugang', 'Cadiao', 'Cadolonan', 'Esparar', 'Ipil', 'Lamogom', 'Linabuan', 'Macatol', 'Napsaan', 'Pasay', 'San Andres', 'San Antonio', 'San Juan', 'San Roque', 'Tabungon', 'Tigbanaba', 'Tinigbasan'
+  ],
+  'Belison': [
+   'Borocboroc', 'Buenavista', 'Concepcion', 'Delima', 'Maradiona', 'Mojon', 'Poblacion', 'Rombang', 'Sinaja-an'
+  ],
+  'Bugasong': [
+    'Agojo', 'Bagtason', 'Bitadton Norte', 'Bitadton Sur', 'Cubay', 'Cubi-cubi', 'Daja', 'Ilaures', 'Ipil', 'Igsoro', 'Laguinbanua', 'Lawa-an', 'Madrangca', 'Maybunga', 'Namatay', 'Pangalcagan', 'Patria', 'Poblacion', 'Salusoy', 'San Antonio', 'San Fernando', 'San Gregorio', 'San Jose', 'San Juan', 'San Rafael', 'Santo Rosario'
+  ],
+
+  'Caluya': [
+   'Alegria', 'Bacong', 'Banago', 'Bonbon', 'Caluya Poblacion', 'Camanci', 'Canas', 'Imba', 'Lipata', 'Lucio Laurel', 'Semirara', 'Sibolo', 'Sibato'
+  ],
+
+  'Culasi': [
+   'Alojipan', 'Bacong', 'Balac-Balac', 'Balitbiton', 'Camancijan', 'Carit-an', 'Condes', 'Cubay Norte', 'Cubay Sur', 'Dalipe', 'Flores', 'Imba', 'Ipayo', 'Malacañang', 'Malalison', 'Magsaysay', 'Rosario', 'Salde', 'San Antonio', 'San Juan', 'San Pedro', 'Simbola', 'Tinabanan', 'Valderrama'
+  ],
+
+
+  'Hamtic': [
+    'Aglibacao', 'Apgahan', 'Asluman', 'Atabay', 'Bacong', 'Banawan', 'Bantayan', 'Biga-a', 'Buhang', 'Cansadan', 'Carit-an', 'Catungan I', 'Catungan II', 'Cawayan', 'Dangcalan', 'Durog', 'Egaña', 'Gen. Fullon', 'Guintas', 'Igbangcal', 'Igburi', 'Iglilico', 'Inabasan', 'Malandog', 'Pasungay', 'Piape I', 'Piape II', 'Poblacion', 'San Jose', 'San Rafael', 'San Roque', 'Tigbayog'
+  ],
+
+  'Laua-an': [
+'Alojipan', 'Bagumbayan', 'Barasanan A', 'Barasanan B', 'Bucaya', 'Cansilayan', 'Capnayan', 'Capoyuan', 'Casit-an', 'Guinobatan', 'Idio', 'Lugutan', 'Ma-asin', 'Madalag', 'Magcalon', 'Maybunga', 'Oloc', 'Poblacion', 'San Ramon', 'SiRamon'
+  ],
+
+  'Libertad': [
+'Barangka', 'Bato', 'Bolanao', 'Bongan', 'Calabanog', 'Codiong', 'Cubay Norte', 'Cubay Sur', 'Idiacacan', 'Insubuan', 'Libertad Poblacion', 'Maasin', 'San Isidro', 'San Roque', 'Tag-Osip'
+  ],
+
+  'Pandan': [
+'Agosip', 'Aracay', 'Bagumbayan', 'Batonan Norte', 'Batonan Sur', 'Centro Norte', 'Centro Sur', 'Culpog', 'Dionela', 'Dumangsal', 'Idiacacan', 'Igpalje', 'Lanipe', 'Mag-aba', 'Malatapas', 'Nauring', 'Patria', 'San Andres', 'Santa Ana', 'Santo Rosario', 'Tingib'
+  ],
+
+
+  'Patnongon': [
+   'Aureliana', 'Bagumbayan', 'Badiang', 'Bangbang', 'Bariri', 'Binanu-an', 'Cansadan', 'Cansilayan', 'Carit-an', 'Catmonan', 'Cubay', 'Igbarawan', 'Igburi', 'Iglinab', 'Igtalongon', 'La-Rioja', 'Linabuan', 'Malan-as', 'Maribong', 'Poblacion', 'Salaguiawan', 'San Antonio', 'San Roque', 'Santa Monica'
+  ],
+
+
+  'San Jose de Buenavista': [
+'Atabay', 'Badiang', 'Barangay 1 (Poblacion)', 'Barangay 2 (Poblacion)', 'Barangay 3 (Poblacion)', 'Barangay 4 (Poblacion)', 'Barangay 5 (Poblacion)', 'Barangay 6 (Poblacion)', 'Barangay 7 (Poblacion)', 'Barangay 8 (Poblacion)', 'Barangay 9 (Poblacion)', 'Barangay 10 (Poblacion)', 'Barangay 11 (Poblacion)', 'Barangay 12 (Poblacion)', 'Barangay 13 (Poblacion)', 'Barangay 14 (Poblacion)', 'Barangay 15 (Poblacion)', 'Barangay 16 (Poblacion)', 'Barangay 17 (Poblacion)', 'Barangay 18 (Poblacion)', 'Barangay 19 (Poblacion)', 'Barangay 20 (Poblacion)', 'Barangay 21 (Poblacion)', 'Barangay 22 (Poblacion)', 'Barangay 23 (Poblacion)', 'Barangay 24 (Poblacion)', 'Barangay 25 (Poblacion)', 'Barangay 26 (Poblacion)', 'Barangay 27 (Poblacion)', 'Barangay 28 (Poblacion)', 'Barangay 29 (Poblacion)', 'Barangay 30 (Poblacion)', 'Barangay 31 (Poblacion)', 'Barangay 32 (Poblacion)', 'Barangay 33 (Poblacion)', 'Barangay 34 (Poblacion)', 'Barangay 35 (Poblacion)', 'Barangay 36 (Poblacion)', 'Barangay 37 (Poblacion)', 'Barangay 38 (Poblacion)'
+  ],
+
+
+  'San Remigio': [
+   'Aningalan', 'Bagtason', 'Banbanan', 'Barangay I (Poblacion)', 'Barangay II (Poblacion)', 'Barangay III (Poblacion)', 'Barangay IV (Poblacion)', 'Barangay V (Poblacion)', 'Barangay VI (Poblacion)', 'Barangay VII (Poblacion)', 'Barangay VIII (Poblacion)', 'Barangay IX (Poblacion)', 'Barangay X (Poblacion)', 'Barangay XI (Poblacion)', 'Barangay XII (Poblacion)', 'Batuan', 'Biga', 'Buenavista', 'Cabunga-an', 'Capinpisan', 'Gen. Luna', 'Iglinab', 'Inabasan', 'La Union', 'Magdalena', 'Osorio I', 'Osorio II', 'Panpanan I', 'Panpanan II', 'Sinundolan', 'Supanga', 'Tordesillas', 'Tubudan'
+  ],
+
+
+  'Sebaste': [
+'Abiera', 'Aguila', 'Idio', 'Ipil', 'Nauhon', 'P. Javier', 'San Antonio', 'San Luis', 'Villahermosa'
+  ],
+
+
+  'Sibalom': [
+'Apong', 'Atabay', 'Bagumbayan', 'Banbanan', 'Bulanao', 'Bugnay', 'Cansadan Del Sur', 'Catmon', 'Cubay', 'Egana', 'Igcococ', 'Iglanot', 'Igsococ', 'Ilaures', 'Imparayan', 'Inabasan', 'Insarayan', 'Nabaoy', 'Nalipayan', 'Palaypay', 'Poblacion', 'Pucio', 'Sabang West', 'San Pedro', 'Sinaja-an', 'Tacbuyan', 'Taclobo', 'Tubudan'
+  ],
+
+
+  'Tibiao': [
+ 'Barangay I (Poblacion)', 'Barangay II (Poblacion)', 'Barangay III (Poblacion)', 'Barangay IV (Poblacion)', 'Barangay V (Poblacion)', 'Barangay VI (Poblacion)', 'Barangay VII (Poblacion)', 'Barangay VIII (Poblacion)', 'Barangay IX (Poblacion)', 'Barangay X (Poblacion)', 'Barangay XI (Poblacion)', 'Barangay XII (Poblacion)', 'Barangay XIII (Poblacion)', 'Barangay XIV (Poblacion)', 'Barangay XV (Poblacion)', 'Barangay XVI (Poblacion)'
+  ],
+
+
+  'Tobias Fornier (Dao)': [
+'Abaca', 'Aningalan', 'Ballescas', 'Barasanan', 'Bandoja', 'Bugtongbato', 'Bulanao', 'Buyu-an', 'Camancijan', 'Dapdap', 'Igcadlum', 'Igtalongon', 'Lucero', 'Malacañang', 'Paciencia', 'Pasong', 'Pis-anan', 'San Antonio', 'San Francisco Norte', 'San Francisco Sur', 'San Pedro', 'Santa Ana', 'Santo Tomas'
+  ],
+
+  'Valderrama': [
+'Bakiang', 'Buluangan I', 'Buluangan II', 'Canipayan', 'Cananghan', 'Canipayan', 'Iglinab', 'Lublub', 'Malabor', 'Manlacbo', 'Pandanan', 'Patong-Patong', 'Poblacion', 'San Agustin', 'San Antonio', 'San Fernando', 'San Gabriel', 'San Roque', 'Suguidan', 'Talisay', 'Tubudan'
+      ],
+    
+  // Add more municipalities and their barangays as needed
+};
+
 const CreateAccountEmployer = () => {
   const navigation = useNavigation();
   const [formData, setFormData] = useState({
     fullName: '',
     gender: '',
-    address: '',
+    street: '',
+    province: 'Antique', // Default to Antique
+    municipality: '',
+    barangay: '',
     birthdate: '',
     phoneNumber: '',
     email: '',
@@ -61,6 +168,17 @@ const CreateAccountEmployer = () => {
 
   const handleInputChange = (key, value) => {
     setFormData((prev) => ({ ...prev, [key]: value }));
+    
+    // Reset barangay when municipality changes
+    if (key === 'municipality') {
+      setFormData((prev) => ({ ...prev, barangay: '' }));
+    }
+  };
+
+  // Get barangays for the selected municipality
+  const getBarangays = () => {
+    if (!formData.municipality) return [];
+    return BARANGAYS_BY_MUNICIPALITY[formData.municipality] || [];
   };
 
   const validateForm = () => {
@@ -145,10 +263,16 @@ const CreateAccountEmployer = () => {
       companyWebsite,
       username,
       phoneNumber,
-      address,
+      street,
+      barangay,
+      municipality,
+      province,
       gender,
       birthdate
     } = formData;
+  
+    // Construct full address
+    const address = `${street}, ${barangay}, ${municipality}, ${province}, Philippines`;
   
     try {
       // Create the user
@@ -173,6 +297,11 @@ const CreateAccountEmployer = () => {
         username,
         phoneNumber,
         address,
+        street,
+        barangay,
+        municipality,
+        province,
+        country: 'Philippines',
         gender,
         birthdate,
         companyName,
@@ -267,13 +396,67 @@ const CreateAccountEmployer = () => {
               </Picker>
             </View>
 
-            <Text style={styles.label}>Address</Text>
+            <Text style={styles.label}>Street Address*</Text>
             <TextInput
-              placeholder="Enter your full address"
+              placeholder="House #, Street, Building"
               style={styles.input}
-              value={formData.address}
-              onChangeText={(value) => handleInputChange('address', value)}
+              value={formData.street}
+              onChangeText={(value) => handleInputChange('street', value)}
             />
+
+            <Text style={styles.label}>Province*</Text>
+            <View style={[styles.pickerContainer, styles.disabledInput]}>
+              <Picker
+                selectedValue={formData.province}
+                style={styles.picker}
+                enabled={false} // Make it non-editable
+              >
+                <Picker.Item label="Antique" value="Antique" />
+              </Picker>
+            </View>
+
+            <Text style={styles.label}>Municipality/Town*</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={formData.municipality}
+                style={styles.picker}
+                onValueChange={(itemValue) => handleInputChange('municipality', itemValue)}
+              >
+                <Picker.Item label="Select Municipality/Town" value="" />
+                {ANTIQUE_MUNICIPALITIES.map((municipality) => (
+                  <Picker.Item key={municipality} label={municipality} value={municipality} />
+                ))}
+              </Picker>
+            </View>
+
+            <Text style={styles.label}>Barangay*</Text>
+            <View style={styles.pickerContainer}>
+              <Picker
+                selectedValue={formData.barangay}
+                style={styles.picker}
+                enabled={!!formData.municipality} // Only enable if municipality is selected
+                onValueChange={(itemValue) => handleInputChange('barangay', itemValue)}
+              >
+                <Picker.Item 
+                  label={formData.municipality ? "Select Barangay" : "Select Municipality first"} 
+                  value="" 
+                />
+                {getBarangays().map((barangay) => (
+                  <Picker.Item key={barangay} label={barangay} value={barangay} />
+                ))}
+              </Picker>
+            </View>
+
+            <Text style={styles.label}>Country*</Text>
+            <View style={[styles.pickerContainer, styles.disabledInput]}>
+              <Picker
+                selectedValue="Philippines"
+                style={styles.picker}
+                enabled={false} // Make it non-editable
+              >
+                <Picker.Item label="Philippines" value="Philippines" />
+              </Picker>
+            </View>
           </View>
         );
       case 1:
@@ -627,6 +810,9 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     borderWidth: 1,
     borderColor: '#E0E0E0',
+  },
+  disabledInput: {
+    backgroundColor: '#EEE',
   },
   dateText: {
     color: '#333',
