@@ -13,11 +13,13 @@ import {
 } from "react-native";
 import MapView, { Marker } from "react-native-maps";
 import { RouteProp, useRoute, useNavigation } from "@react-navigation/native";
-import { db, doc, getDoc, collection, query, where, getDocs, addDoc, Timestamp } from "../../DataBases/firebaseConfig";
-import { auth } from "../../DataBases/firebaseConfig";
 import { getAuth } from "firebase/auth";
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { db, auth } from '../../DataBases/firebaseConfig';
+import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+
 
 type JobDetailsRouteProp = RouteProp<
   {
@@ -115,56 +117,62 @@ const JobDetails = () => {
     setSelectedImage(null);
   };
 
-  const handleStartChat = async () => {
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      Alert.alert("Error", "You must be logged in to send a message.");
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const chatRef = collection(db, "chats");
-      const participants = [currentUser.uid, userId];
-
-      const chatQuery = query(
-        chatRef,
-        where("participants", "array-contains", currentUser.uid)
-      );
-      const chatSnap = await getDocs(chatQuery);
-
-      let chatId;
-      let existingChat = null;
-
-      if (!chatSnap.empty) {
+   const handleStartChat = async () => {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        Alert.alert('Error', 'You must be logged in to send a message.');
+        return;
+      }
+    
+      try {
+        const chatRef = collection(db, 'chats');
+        const participants = [currentUser.uid, userId].sort(); // Sort for consistent comparison
+    
+        // Query for existing chat between these exact two users
+        const chatQuery = query(
+          chatRef,
+          where('participants', 'array-contains', currentUser.uid)
+        );
+        
+        const chatSnap = await getDocs(chatQuery);
+        let existingChat = null;
+    
+        // Check each chat to find one with exactly these two participants
         chatSnap.forEach((doc) => {
-          const chat = doc.data();
-          if (chat.participants.includes(userId)) {
+          const chatData = doc.data();
+          if (chatData.participants && 
+              chatData.participants.length === 2 &&
+              chatData.participants.includes(currentUser.uid) && 
+              chatData.participants.includes(userId)) {
             existingChat = doc;
           }
         });
+    
+        if (existingChat) {
+          navigation.navigate('ChatScreen', { 
+            chatId: existingChat.id,
+            otherUserId: userId // Pass the other user's ID explicitly
+          });
+        } else {
+          const newChat = await addDoc(chatRef, {
+            participants,
+            createdAt: Timestamp.now(),
+            lastMessage: { 
+              text: 'Chat started', 
+              senderId: currentUser.uid,
+              createdAt: Timestamp.now() 
+            },
+          });
+          navigation.navigate('ChatScreen', { 
+            chatId: newChat.id,
+            otherUserId: userId // Pass the other user's ID explicitly
+          });
+        }
+      } catch (error) {
+        console.error('Error creating or opening chat room:', error);
+        Alert.alert('Error', 'Unable to start a chat.');
       }
-
-      if (existingChat) {
-        chatId = existingChat.id;
-      } else {
-        const newChat = await addDoc(chatRef, {
-          participants,
-          createdAt: Timestamp.now(),
-          lastMessage: { text: "", createdAt: Timestamp.now() },
-        });
-        chatId = newChat.id;
-      }
-
-      navigation.navigate("ChatScreen", { chatId });
-    } catch (error) {
-      console.error("Error creating or opening chat room:", error);
-      Alert.alert("Error", "Unable to start a chat.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+    };
   const handleCallEmployer = () => {
     if (userInfo?.phoneNumber) {
       Linking.openURL(`tel:${userInfo.phoneNumber}`);
