@@ -45,6 +45,7 @@
     },
     "extra": {
       "googleClientId": "49295683464-96pvs544t9t3g3hit55dlqva4lq894jh.apps.googleusercontent.com",
+      "googleMapsApiKey": "AIzaSyBli3AUygVkjcacIkjXVUE2QdFYweBYK3M",
       "eas": {
         "projectId": "2297d201-f8e1-4114-9d39-1fbca156ab41"
       }

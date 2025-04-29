@@ -102,7 +102,7 @@ const ProfileScreen = () => {
       if (userSnapshot.exists()) {
         const data = userSnapshot.data();
         setUser({
-          name: data.fullName || "Unknown",
+          name: data.username || "Unknown",
           email: data.email || "Unknown",
           image: data.profilePicture || "",
         });
@@ -468,7 +468,8 @@ const styles = StyleSheet.create({
   },
   profileEmail: {
     fontSize: 16,
-    color: "#666",
+    color: "grey",
+    fontWeight:'bold',
     marginBottom: 20,
   },
   followCountContainer: {

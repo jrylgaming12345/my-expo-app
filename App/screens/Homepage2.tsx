@@ -224,7 +224,7 @@ const Home = () => {
             source={
               user.profilePicture
                 ? { uri: user.profilePicture }
-                : require("./assets/google.png")
+                : require("../screens/assets/profile-logo.png")
             }
             style={styles.postProfilePic}
           />
@@ -236,7 +236,7 @@ const Home = () => {
           </View>
           <View style={styles.jobTypeBadge}>
             <Text style={styles.jobTypeText}>
-              {item.jobType === "blue-collar" ? "Blue Collar" : "White Collar"}
+              {item.jobType === "blue collar" ? "Blue Collar" : "White Collar"}
             </Text>
           </View>
         </View>

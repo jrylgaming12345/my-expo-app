@@ -79,7 +79,6 @@ const LoginPage = () => {
     }
   };
 
-
   useEffect(() => {
     if (response?.type === 'success') {
       const { id_token } = response.params;
@@ -161,13 +160,20 @@ const LoginPage = () => {
       <LinearGradient
         colors={['#4A90E2', '#3F51B5']}
         style={styles.header}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
       >
-        <Image
-          source={require('../../assets/login-icon.png')}
-          style={styles.logo}
-        />
-        <Text style={styles.welcomeText}>Welcome to HUSTLE HUB</Text>
-        <Text style={styles.subText}>Login to continue</Text>
+        <View style={styles.headerContent}>
+          <View style={styles.logoContainer}>
+            <Image
+              source={require('../../assets/login-icon.png')}
+              style={styles.logo}
+            />
+          </View>
+          <Text style={styles.welcomeText}>Welcome to</Text>
+          <Text style={styles.appName}>HUSTLE HUB</Text>
+          <View style={styles.waveDecoration} />
+        </View>
       </LinearGradient>
 
       <View style={styles.formContainer}>
@@ -268,28 +274,55 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   header: {
-    height: 250,
+    height: Dimensions.get('window').height * 0.3,
     width: '100%',
+    borderBottomLeftRadius: 50,
+    borderBottomRightRadius: 50,
+  },
+  headerContent: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    borderBottomLeftRadius: 30,
-    borderBottomRightRadius: 30,
-    paddingBottom: 30,
+    paddingTop: 20,
   },
-  logo: {
-    width: 80,
-    height: 80,
+  logoContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 15,
   },
+
+  
+  logo: {
+    width: 60,
+    height: 60,
+    tintColor: '#fff',
+  },
   welcomeText: {
-    fontSize: 28,
+    fontSize: 22,
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginBottom: 5,
+    fontWeight: '300',
+  },
+  appName: {
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 5,
+    marginBottom: 15,
+    letterSpacing: 1,
   },
-  subText: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.8)',
+  waveDecoration: {
+    position: 'absolute',
+    bottom: -20,
+    width: '120%',
+    height: 40,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 50,
+    borderTopRightRadius: 50,
+    transform: [{ scaleX: 1.2 }],
   },
   formContainer: {
     paddingHorizontal: 30,

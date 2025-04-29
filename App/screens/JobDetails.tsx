@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Timestamp } from 'firebase/firestore';
 import {
   View,
   Text,
@@ -19,7 +20,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { db, auth } from '../../DataBases/firebaseConfig';
 import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
-
+import * as ImagePicker from 'expo-image-picker';
 
 type JobDetailsRouteProp = RouteProp<
   {
@@ -59,6 +60,7 @@ const JobDetails = () => {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [userProfilePic, setUserProfilePic] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
+  const [documentImage, setDocumentImage] = useState<string | null>(null);
 
   const [latitude, longitude] = React.useMemo(() => {
     if (
@@ -103,8 +105,101 @@ const JobDetails = () => {
     fetchUserInfo();
   }, [userId]);
 
-  const handleApply = () => {
-    navigation.navigate("JobApplication", { jobId });
+  const pickDocumentImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission required', 'We need camera roll permissions to upload documents');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
+
+      if (!result.canceled) {
+        setDocumentImage(result.assets[0].uri);
+        return result.assets[0].uri;
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image');
+    }
+    return null;
+  };
+
+  const handleApply = async () => {
+    if (currentUserId === userId) return;
+  
+    Alert.alert(
+      'Application Required Documents',
+      `Please upload your ${requiredDocuments || "required documents"}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Upload Document',
+          onPress: async () => {
+            try {
+              const imageUri = await pickDocumentImage();
+              if (!imageUri) return;
+  
+              Alert.alert(
+                'Confirm Application',
+                'Submit application with this document?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Submit',
+                    onPress: async () => {
+                      setIsLoading(true);
+                      try {
+                        const jobRef = doc(db, "jobs", jobId);
+                        
+                        // This will:
+                        // 1. Create the applicants array if it doesn't exist
+                        // 2. Add the new applicant
+                        await updateDoc(jobRef, {
+                          applicants: arrayUnion({
+                            userId: currentUserId,
+                            documentImage: imageUri,
+                            appliedAt: Timestamp.now(),
+                            status: 'pending'
+                          })
+                        }, { merge: true }); // ← This is the key!
+  
+                        // Send notification
+                        await addDoc(collection(db, "notifications"), {
+                          userId: userId,
+                          title: "New Application",
+                          message: `New application for ${title}`,
+                          type: "job_application",
+                          jobId: jobId,
+                          read: false,
+                          createdAt: Timestamp.now()
+                        });
+  
+                        Alert.alert('Success', 'Application submitted!');
+                      } catch (error) {
+                        console.error("Application error:", error);
+                        Alert.alert('Error', 'Failed to submit application');
+                      } finally {
+                        setIsLoading(false);
+                      }
+                    }
+                  }
+                ]
+              );
+            } catch (error) {
+              console.error('Image picker error:', error);
+              Alert.alert('Error', 'Failed to upload document');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const openImageModal = (image: string) => {
@@ -117,62 +212,63 @@ const JobDetails = () => {
     setSelectedImage(null);
   };
 
-   const handleStartChat = async () => {
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        Alert.alert('Error', 'You must be logged in to send a message.');
-        return;
-      }
-    
-      try {
-        const chatRef = collection(db, 'chats');
-        const participants = [currentUser.uid, userId].sort(); // Sort for consistent comparison
-    
-        // Query for existing chat between these exact two users
-        const chatQuery = query(
-          chatRef,
-          where('participants', 'array-contains', currentUser.uid)
-        );
-        
-        const chatSnap = await getDocs(chatQuery);
-        let existingChat = null;
-    
-        // Check each chat to find one with exactly these two participants
-        chatSnap.forEach((doc) => {
-          const chatData = doc.data();
-          if (chatData.participants && 
-              chatData.participants.length === 2 &&
-              chatData.participants.includes(currentUser.uid) && 
-              chatData.participants.includes(userId)) {
-            existingChat = doc;
-          }
-        });
-    
-        if (existingChat) {
-          navigation.navigate('ChatScreen', { 
-            chatId: existingChat.id,
-            otherUserId: userId // Pass the other user's ID explicitly
-          });
-        } else {
-          const newChat = await addDoc(chatRef, {
-            participants,
-            createdAt: Timestamp.now(),
-            lastMessage: { 
-              text: 'Chat started', 
-              senderId: currentUser.uid,
-              createdAt: Timestamp.now() 
-            },
-          });
-          navigation.navigate('ChatScreen', { 
-            chatId: newChat.id,
-            otherUserId: userId // Pass the other user's ID explicitly
-          });
+  const handleStartChat = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      Alert.alert('Error', 'You must be logged in to send a message.');
+      return;
+    }
+  
+    try {
+      const chatRef = collection(db, 'chats');
+      const participants = [currentUser.uid, userId].sort(); // Sort for consistent comparison
+  
+      // Query for existing chat between these exact two users
+      const chatQuery = query(
+        chatRef,
+        where('participants', 'array-contains', currentUser.uid)
+      );
+      
+      const chatSnap = await getDocs(chatQuery);
+      let existingChat = null;
+  
+      // Check each chat to find one with exactly these two participants
+      chatSnap.forEach((doc) => {
+        const chatData = doc.data();
+        if (chatData.participants && 
+            chatData.participants.length === 2 &&
+            chatData.participants.includes(currentUser.uid) && 
+            chatData.participants.includes(userId)) {
+          existingChat = doc;
         }
-      } catch (error) {
-        console.error('Error creating or opening chat room:', error);
-        Alert.alert('Error', 'Unable to start a chat.');
+      });
+  
+      if (existingChat) {
+        navigation.navigate('ChatScreen', { 
+          chatId: existingChat.id,
+          otherUserId: userId // Pass the other user's ID explicitly
+        });
+      } else {
+        const newChat = await addDoc(chatRef, {
+          participants,
+          createdAt: Timestamp.now(),
+          lastMessage: { 
+            text: 'Chat started', 
+            senderId: currentUser.uid,
+            createdAt: Timestamp.now() 
+          },
+        });
+        navigation.navigate('ChatScreen', { 
+          chatId: newChat.id,
+          otherUserId: userId // Pass the other user's ID explicitly
+        });
       }
-    };
+    } catch (error) {
+      console.error('Error creating or opening chat room:', error);
+      Alert.alert('Error', 'Unable to start a chat.');
+    }
+  };
+
   const handleCallEmployer = () => {
     if (userInfo?.phoneNumber) {
       Linking.openURL(`tel:${userInfo.phoneNumber}`);
@@ -237,29 +333,29 @@ const JobDetails = () => {
             </View>
           </View>
         );
-        case "details":
-          return (
-            <View style={styles.detailsContainer}>
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Job Description</Text>
-                <Text style={styles.sectionContent}>{description}</Text>
-              </View>
-        
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Job Type</Text>
-                <View style={styles.jobTypeBadge}>
-                  <Text style={styles.jobTypeText}>{jobType}</Text>
-                </View>
-              </View>
-        
-              <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Required Documents</Text>
-                <Text style={styles.sectionContent}>
-                  {requiredDocuments || "No documents required"}
-                </Text>
+      case "details":
+        return (
+          <View style={styles.detailsContainer}>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Job Description</Text>
+              <Text style={styles.sectionContent}>{description}</Text>
+            </View>
+      
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Job Type</Text>
+              <View style={styles.jobTypeBadge}>
+                <Text style={styles.jobTypeText}>{jobType}</Text>
               </View>
             </View>
-          );
+      
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Required Documents</Text>
+              <Text style={styles.sectionContent}>
+                {requiredDocuments || "No documents required"}
+              </Text>
+            </View>
+          </View>
+        );
       case "images":
         return images?.length > 0 ? (
           <View style={styles.imagesContainer}>
@@ -313,7 +409,7 @@ const JobDetails = () => {
                 currentUserId === userId && styles.disabledButton,
               ]}
               onPress={handleApply}
-              disabled={currentUserId === userId}
+              disabled={currentUserId === userId || isLoading}
             >
               <LinearGradient
                 colors={currentUserId === userId ? ['#CCCCCC', '#AAAAAA'] : ['#6C63FF', '#4A42E8']}
@@ -375,6 +471,8 @@ const JobDetails = () => {
     </View>
   );
 };
+
+// ... (keep the existing styles unchanged
 
 const styles = StyleSheet.create({
   container: {

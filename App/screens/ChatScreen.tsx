@@ -16,7 +16,7 @@ import {
   Animated,
   Dimensions
 } from 'react-native';
-import { db, auth } from '../../DataBases/firebaseConfig';
+import { db, auth, storage } from '../../DataBases/firebaseConfig';
 import {
   collection,
   query,
@@ -28,6 +28,9 @@ import {
   getDoc,
   updateDoc,
 } from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -41,9 +44,21 @@ const ChatScreen = ({ route, navigation }) => {
   const [otherUserName, setOtherUserName] = useState('');
   const [otherUserProfilePic, setOtherUserProfilePic] = useState(null);
   const [isSending, setIsSending] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
   const flatListRef = useRef(null);
   const inputRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+
+ // Request media library permissions
+useEffect(() => {
+  (async () => {
+    const { status: mediaStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (mediaStatus !== 'granted') {
+      Alert.alert('Permission required', 'We need access to your photos to let you send images.');
+    }
+  })();
+}, []);
 
   // Header animation
   useEffect(() => {
@@ -137,6 +152,132 @@ const ChatScreen = ({ route, navigation }) => {
     fetchOtherUserDetails();
   }, [chatId]);
 
+  // Handle image selection
+  const pickImage = async () => {
+    try {
+      let result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.7,
+      });
+
+      if (!result.canceled) {
+        await uploadFile(result.assets[0].uri, 'image');
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
+  // Handle document selection
+  const pickDocument = async () => {
+    try {
+      let result = await DocumentPicker.getDocumentAsync({
+        type: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/pdf'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.type === 'success') {
+        await uploadFile(result.uri, 'document', result.name, result.mimeType);
+      }
+    } catch (error) {
+      console.error('Error picking document:', error);
+      Alert.alert('Error', 'Failed to pick document. Please try again.');
+    }
+  };
+
+  // Upload file to Firebase Storage (handles both images and documents)
+  const uploadFile = async (uri, type, fileName = null, mimeType = null) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      Alert.alert('Error', 'You must be logged in to send files.');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      setUploadProgress(0);
+
+      // Fetch the file blob
+      const response = await fetch(uri);
+      const blob = await response.blob();
+
+      // Determine storage path and metadata
+      let storagePath, metadata;
+      if (type === 'image') {
+        storagePath = `chat_images/${chatId}/${Date.now()}`;
+      } else {
+        const extension = fileName?.split('.').pop() || 'docx';
+        storagePath = `chat_documents/${chatId}/${Date.now()}.${extension}`;
+        metadata = {
+          contentType: mimeType || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          customMetadata: {
+            originalName: fileName || `document_${Date.now()}`,
+          }
+        };
+      }
+
+      // Create a reference to the storage location
+      const storageRef = ref(storage, storagePath);
+      const uploadTask = metadata 
+        ? uploadBytesResumable(storageRef, blob, metadata)
+        : uploadBytesResumable(storageRef, blob);
+
+      // Listen for state changes, errors, and completion
+      uploadTask.on(
+        'state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(progress);
+        },
+        (error) => {
+          console.error('Upload error:', error);
+          setIsUploading(false);
+          Alert.alert('Error', 'Failed to upload file. Please try again.');
+        },
+        async () => {
+          // Upload completed successfully, get download URL
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+
+          // Create the message object
+          const messageData = {
+            senderId: currentUser.uid,
+            createdAt: serverTimestamp(),
+          };
+
+          if (type === 'image') {
+            messageData.imageUrl = downloadURL;
+          } else {
+            messageData.documentUrl = downloadURL;
+            messageData.documentName = fileName || `document_${Date.now()}.docx`;
+            messageData.documentType = mimeType || 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+          }
+
+          // Send the message
+          await addDoc(collection(db, 'chats', chatId, 'messages'), messageData);
+
+          // Update the lastMessage field in the chat document
+          const chatRef = doc(db, 'chats', chatId);
+          await updateDoc(chatRef, {
+            lastMessage: {
+              text: type === 'image' ? '[Image]' : '[Document]',
+              createdAt: serverTimestamp(),
+            },
+          });
+
+          setIsUploading(false);
+          setUploadProgress(0);
+        }
+      );
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      setIsUploading(false);
+      Alert.alert('Error', 'Failed to upload file. Please try again.');
+    }
+  };
+
   // Handle sending a message
   const handleSendMessage = async () => {
     const currentUser = auth.currentUser;
@@ -203,21 +344,98 @@ const ChatScreen = ({ route, navigation }) => {
             isCurrentUser ? styles.currentUserBubble : styles.otherUserBubble,
           ]}
         >
-          <Text style={[
-            styles.messageText,
-            isCurrentUser ? styles.currentUserText : styles.otherUserText
-          ]}>
-            {item.text}
-          </Text>
-          <Text style={[
-            styles.messageTime,
-            isCurrentUser ? styles.currentUserTime : styles.otherUserTime
-          ]}>
-            {messageTime}
-          </Text>
+          {item.imageUrl ? (
+            <>
+              <Image
+                source={{ uri: item.imageUrl }}
+                style={styles.messageImage}
+                resizeMode="cover"
+              />
+              <Text style={[
+                styles.messageTime,
+                isCurrentUser ? styles.currentUserTime : styles.otherUserTime,
+                styles.imageTime
+              ]}>
+                {messageTime}
+              </Text>
+            </>
+          ) : item.documentUrl ? (
+            <>
+              <View style={styles.documentContainer}>
+                <Icon name="document-attach-outline" size={40} color={isCurrentUser ? '#FFF' : '#6C63FF'} />
+                <Text 
+                  style={[
+                    styles.documentName,
+                    isCurrentUser ? styles.currentUserText : styles.otherUserText
+                  ]}
+                  numberOfLines={1}
+                  ellipsizeMode="middle"
+                >
+                  {item.documentName || 'Document'}
+                </Text>
+                <TouchableOpacity 
+                  style={styles.downloadButton}
+                  onPress={() => downloadDocument(item.documentUrl, item.documentName)}
+                >
+                  <Text style={[
+                    styles.downloadButtonText,
+                    isCurrentUser ? styles.currentUserText : styles.otherUserText
+                  ]}>
+                    Download
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={[
+                styles.messageTime,
+                isCurrentUser ? styles.currentUserTime : styles.otherUserTime
+              ]}>
+                {messageTime}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={[
+                styles.messageText,
+                isCurrentUser ? styles.currentUserText : styles.otherUserText
+              ]}>
+                {item.text}
+              </Text>
+              <Text style={[
+                styles.messageTime,
+                isCurrentUser ? styles.currentUserTime : styles.otherUserTime
+              ]}>
+                {messageTime}
+              </Text>
+            </>
+          )}
         </View>
       </View>
     );
+  };
+
+  // Function to handle document download
+  const downloadDocument = async (url, fileName) => {
+    try {
+      // In a real app, you would use a library like react-native-fs to download the file
+      // For this example, we'll just open the URL in the browser
+      Alert.alert(
+        'Download Document',
+        `Would you like to download ${fileName || 'this document'}?`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Open',
+            onPress: () => Linking.openURL(url)
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error downloading document:', error);
+      Alert.alert('Error', 'Failed to download document. Please try again.');
+    }
   };
 
   return (
@@ -272,12 +490,45 @@ const ChatScreen = ({ route, navigation }) => {
             keyboardShouldPersistTaps="handled"
           />
 
+          {/* Upload progress indicator */}
+          {isUploading && (
+            <View style={styles.progressContainer}>
+              <View style={styles.progressBar}>
+                <View 
+                  style={[
+                    styles.progressFill, 
+                    { width: `${uploadProgress}%` }
+                  ]} 
+                />
+              </View>
+              <Text style={styles.progressText}>
+                Uploading: {Math.round(uploadProgress)}%
+              </Text>
+            </View>
+          )}
+
           {/* Input field for sending messages */}
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.inputContainer}
           >
             <View style={styles.inputWrapper}>
+              <TouchableOpacity 
+                style={styles.attachmentButton}
+                onPress={pickImage}
+                disabled={isUploading}
+              >
+                <Icon name="image-outline" size={24} color="#6C63FF" />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.attachmentButton}
+                onPress={pickDocument}
+                disabled={isUploading}
+              >
+                <Icon name="document-attach-outline" size={24} color="#6C63FF" />
+              </TouchableOpacity>
+              
               <TextInput
                 ref={inputRef}
                 style={styles.textInput}
@@ -289,6 +540,7 @@ const ChatScreen = ({ route, navigation }) => {
                 blurOnSubmit={false}
                 onSubmitEditing={handleSendMessage}
               />
+              
               <TouchableOpacity
                 style={[
                   styles.sendButton,
@@ -432,10 +684,42 @@ const styles = StyleSheet.create({
   otherUserText: {
     color: '#333',
   },
+  messageImage: {
+    width: 200,
+    height: 200,
+    borderRadius: 10,
+    marginBottom: 5,
+  },
+  documentContainer: {
+    alignItems: 'center',
+    padding: 10,
+  },
+  documentName: {
+    fontSize: 14,
+    marginTop: 5,
+    maxWidth: 180,
+  },
+  downloadButton: {
+    marginTop: 10,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: '#6C63FF',
+  },
+  downloadButtonText: {
+    fontSize: 14,
+  },
   messageTime: {
     fontSize: 10,
     marginTop: 5,
     textAlign: 'right',
+  },
+  imageTime: {
+    color: '#FFF',
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 0.5, height: 0.5 },
+    textShadowRadius: 1,
   },
   currentUserTime: {
     color: 'rgba(255,255,255,0.7)',
@@ -458,6 +742,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  attachmentButton: {
+    marginRight: 10,
+  },
   textInput: {
     flex: 1,
     backgroundColor: '#F0F2F5',
@@ -478,6 +765,31 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     backgroundColor: '#CCC',
+  },
+  progressContainer: {
+    position: 'absolute',
+    bottom: 70,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 20,
+    paddingVertical: 5,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: '#6C63FF',
+  },
+  progressText: {
+    fontSize: 12,
+    color: '#6C63FF',
+    textAlign: 'center',
+    marginTop: 3,
   },
 });
 

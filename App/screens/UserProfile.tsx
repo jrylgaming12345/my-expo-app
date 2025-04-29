@@ -44,7 +44,9 @@ const UserProfile = ({ route, navigation }) => {
             username: data.username || 'No Username',
             email: data.email || 'No Email',
             bio: data.bio || 'No bio available',
-            profession: data.professionalHeadline || 'Not specified'
+            profession: data.role === 'Jobseeker' ? (data.professionalHeadline || '') : '',
+            role: data.role || 'Not specified',
+
           });
           
           // Fetch stats
@@ -216,6 +218,7 @@ const UserProfile = ({ route, navigation }) => {
           </View>
 
           <Text style={styles.username}>{userData.username}</Text>
+          <Text style={styles.role}>{userData.role}</Text>
           <Text style={styles.profession}>{userData.profession}</Text>
           <Text style={styles.bio}>{userData.bio}</Text>
 
@@ -343,12 +346,21 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 5,
   },
-  profession: {
+  role: {
     fontSize: 16,
+    color: 'green',
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+
+  profession: {
+    fontSize: 12,
     color: '#5D3FD3',
     fontWeight: '600',
     marginBottom: 10,
   },
+
+  
   bio: {
     fontSize: 14,
     color: '#666',

@@ -1,8 +1,4 @@
 import React, { useState } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getAuth } from 'firebase/auth';
 import { 
   View, 
   Text, 
@@ -12,7 +8,7 @@ import {
   ScrollView,
   Image
 } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import firestore from '@react-native-firebase/firestore';
 import storage from '@react-native-firebase/storage';
@@ -42,153 +38,155 @@ const JobApplication = () => {
     ? requiredDocuments.split(/[,;\n]/).map(doc => doc.trim()).filter(doc => doc)
     : [];
 
-    const handleDocumentUpload = async () => {
-      if (documents.length >= 5) {
-        Alert.alert('Limit Reached', 'You can upload up to 5 documents only.');
+  const handleImageUpload = async () => {
+    if (documents.length >= 5) {
+      Alert.alert('Limit Reached', 'You can upload up to 5 files only.');
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      
+      // Request permissions
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to make this work!');
         return;
       }
-    
-      try {
-        setIsUploading(true);
-        const result = await DocumentPicker.getDocumentAsync({
-          type: '*/*',
-          copyToCacheDirectory: true,
-          multiple: false,
-        });
-    
-        console.log('Document picker result:', result); // Keep this for debugging
-    
-        // Check if the picker was canceled
-        if (result.canceled) {
-          console.log('Document picker was canceled');
-          setIsUploading(false);
-          return;
-        }
-    
-        // Verify we have assets
-        if (!result.assets || result.assets.length === 0) {
-          console.log('No assets in document picker result');
-          Alert.alert('Error', 'No document was selected');
-          setIsUploading(false);
-          return;
-        }
-    
-        const asset = result.assets[0];
-        
-        // Ensure we have the required file information
-        if (!asset.uri || !asset.name) {
-          console.log('Incomplete document information:', asset);
-          Alert.alert('Error', 'Selected document is missing required information');
-          setIsUploading(false);
-          return;
-        }
-    
-        const fileUri = asset.uri;
-        const fileName = asset.name;
-        const fileType = asset.mimeType || 'application/octet-stream';
-        const fileSize = asset.size || 0;
-    
-        // Create a reference to the file in Firebase Storage
-        const fileExtension = fileName.split('.').pop();
-        const uniqueFileName = `${Date.now()}.${fileExtension}`;
-        const storageRef = storage().ref(`jobDocuments/${auth().currentUser?.uid}/${uniqueFileName}`);
-    
-        // Show uploading indicator
-        Alert.alert('Uploading', `Please wait while we upload ${fileName}...`);
-    
-        // First add the document to state (but mark as pending upload)
-        const pendingDocument = { 
-          name: fileName, 
-          uri: fileUri, 
-          type: fileType,
-          size: (fileSize / 1024).toFixed(1) + ' KB',
-          isUploading: true
-        };
-        setDocuments(prev => [...prev, pendingDocument]);
-    
-        // Upload the file
-        const uploadTask = storageRef.putFile(fileUri);
-    
-        uploadTask.on('state_changed', 
-          (snapshot) => {
-            // Track upload progress if needed
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log(`Upload is ${progress}% done`);
-          },
-          (error) => {
-            console.log('Upload error:', error);
-            // Remove the pending document if upload fails
-            setDocuments(prev => prev.filter(doc => doc.uri !== fileUri));
-            Alert.alert('Error', 'Failed to upload document');
-            setIsUploading(false);
-          },
-          async () => {
-            try {
-              const fileUrl = await storageRef.getDownloadURL();
-              
-              // Update the document in state with the final URL
-              setDocuments(prev => prev.map(doc => 
-                doc.uri === fileUri 
-                  ? { 
-                      ...doc, 
-                      uri: fileUrl, 
-                      isUploading: false,
-                      storagePath: storageRef.fullPath 
-                    } 
-                  : doc
-              ));
-              
-              Alert.alert('Success', `${fileName} uploaded successfully!`);
-            } catch (error) {
-              console.log('Error getting download URL:', error);
-              setDocuments(prev => prev.filter(doc => doc.uri !== fileUri));
-              Alert.alert('Error', 'Failed to get document URL');
-            } finally {
-              setIsUploading(false);
-            }
-          }
-        );
-      } catch (error) {
-        console.log('Error picking document:', error);
-        Alert.alert('Error', 'There was an error selecting the document.');
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
+        allowsEditing: false,
+        quality: 1,
+        allowsMultipleSelection: false,
+      });
+
+      console.log('Image picker result:', result); // Debugging
+
+      if (result.canceled) {
+        console.log('User cancelled image picker');
         setIsUploading(false);
+        return;
       }
-    };
-    
-    const handleRemoveDocument = async (index: number) => {
-      Alert.alert(
-        'Remove Document',
-        'Are you sure you want to remove this document?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Remove', 
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                const docToRemove = documents[index];
-                
-                // Delete from Firebase Storage if path exists
-                if (docToRemove.storagePath) {
-                  const fileRef = storage().ref(docToRemove.storagePath);
-                  await fileRef.delete();
-                }
-                
-                // Remove from local state
-                setDocuments(documents.filter((_, i) => i !== index));
-              } catch (error) {
-                console.log('Error removing document:', error);
-                Alert.alert('Error', 'Failed to remove document from storage');
+
+      if (!result.assets || result.assets.length === 0) {
+        console.log('No assets selected');
+        Alert.alert('Error', 'No image was selected');
+        setIsUploading(false);
+        return;
+      }
+
+      const asset = result.assets[0];
+      const fileUri = asset.uri;
+      const fileName = asset.fileName || `image_${Date.now()}.jpg`;
+      const fileType = asset.type || 'image/jpeg';
+      const fileSize = asset.fileSize || 0;
+
+      // First add the document to state (but mark as pending upload)
+      const pendingDocument = { 
+        name: fileName, 
+        uri: fileUri, 
+        type: fileType,
+        size: (fileSize / 1024).toFixed(1) + ' KB',
+        isUploading: true
+      };
+      setDocuments(prev => [...prev, pendingDocument]);
+
+      // Create a reference to the file in Firebase Storage
+      const fileExtension = fileName.split('.').pop();
+      const uniqueFileName = `${Date.now()}.${fileExtension}`;
+      const storageRef = storage().ref(`jobDocuments/${auth().currentUser?.uid}/${uniqueFileName}`);
+
+      // Show uploading indicator
+      Alert.alert('Uploading', `Please wait while we upload ${fileName}...`);
+
+      // Upload the file
+      const response = await fetch(fileUri);
+      const blob = await response.blob();
+
+      const uploadTask = storageRef.put(blob);
+
+      uploadTask.on('state_changed', 
+        (snapshot) => {
+          // Track upload progress if needed
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          console.log(`Upload is ${progress}% done`);
+        },
+        (error) => {
+          console.log('Upload error:', error);
+          // Remove the pending document if upload fails
+          setDocuments(prev => prev.filter(doc => doc.uri !== fileUri));
+          Alert.alert('Error', 'Failed to upload file');
+          setIsUploading(false);
+        },
+        async () => {
+          try {
+            const fileUrl = await storageRef.getDownloadURL();
+            
+            // Update the document in state with the final URL
+            setDocuments(prev => prev.map(doc => 
+              doc.uri === fileUri 
+                ? { 
+                    ...doc, 
+                    uri: fileUrl, 
+                    isUploading: false,
+                    storagePath: storageRef.fullPath 
+                  } 
+                : doc
+            ));
+            
+            Alert.alert('Success', `${fileName} uploaded successfully!`);
+          } catch (error) {
+            console.log('Error getting download URL:', error);
+            setDocuments(prev => prev.filter(doc => doc.uri !== fileUri));
+            Alert.alert('Error', 'Failed to get file URL');
+          } finally {
+            setIsUploading(false);
+          }
+        }
+      );
+    } catch (error) {
+      console.log('Error picking image:', error);
+      Alert.alert('Error', 'There was an error selecting the image.');
+      setIsUploading(false);
+    }
+  };
+
+  const handleRemoveDocument = async (index: number) => {
+    Alert.alert(
+      'Remove File',
+      'Are you sure you want to remove this file?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Remove', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const docToRemove = documents[index];
+              
+              // Delete from Firebase Storage if path exists
+              if (docToRemove.storagePath) {
+                const fileRef = storage().ref(docToRemove.storagePath);
+                await fileRef.delete();
               }
+              
+              // Remove from local state
+              setDocuments(documents.filter((_, i) => i !== index));
+            } catch (error) {
+              console.log('Error removing file:', error);
+              Alert.alert('Error', 'Failed to remove file from storage');
             }
           }
-        ]
-      );
-    };
+        }
+      ]
+    );
+  };
 
   const handleSubmitApplication = async () => {
     if (documents.length < 1) {
-      Alert.alert('Required', 'Please upload at least one document.');
+      Alert.alert('Required', 'Please upload at least one file.');
       return;
     }
 
@@ -265,14 +263,14 @@ const JobApplication = () => {
       )}
 
       <View style={styles.uploadSection}>
-        <Text style={styles.sectionTitle}>Your Documents</Text>
+        <Text style={styles.sectionTitle}>Your Files</Text>
         <Text style={styles.uploadHint}>
-          Upload your files (PDF, DOC, JPG, etc.) - Max 5 files
+          Upload your files (Images first for testing) - Max 5 files
         </Text>
 
         <TouchableOpacity 
           style={styles.uploadButton}
-          onPress={handleDocumentUpload}
+          onPress={handleImageUpload}
           disabled={isUploading || documents.length >= 5}
         >
           <LinearGradient
@@ -286,13 +284,13 @@ const JobApplication = () => {
               style={styles.uploadIcon}
             />
             <Text style={styles.uploadButtonText}>
-              {isUploading ? 'Uploading...' : 'Select Document'}
+              {isUploading ? 'Uploading...' : 'Select Image'}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
 
         <Text style={styles.documentsCount}>
-          {documents.length} of 5 documents uploaded
+          {documents.length} of 5 files uploaded
         </Text>
       </View>
 
@@ -301,12 +299,19 @@ const JobApplication = () => {
           {documents.map((doc, index) => (
             <View key={index} style={styles.documentCard}>
               <View style={styles.documentInfo}>
-                <Icon 
-                  name={getFileIcon(doc.type)} 
-                  size={28} 
-                  color="#6C63FF" 
-                  style={styles.documentIcon}
-                />
+                {doc.type.includes('image') ? (
+                  <Image 
+                    source={{ uri: doc.uri }} 
+                    style={[styles.documentIcon, { width: 28, height: 28, borderRadius: 4 }]}
+                  />
+                ) : (
+                  <Icon 
+                    name={getFileIcon(doc.type)} 
+                    size={28} 
+                    color="#6C63FF" 
+                    style={styles.documentIcon}
+                  />
+                )}
                 <View style={styles.documentDetails}>
                   <Text 
                     style={styles.documentName}
@@ -350,6 +355,9 @@ const JobApplication = () => {
   );
 };
 
+// ... (keep your existing styles) ...
+
+export default JobApplication;
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   SafeAreaView,
   View,
@@ -12,13 +12,42 @@ import {
 } from "react-native";
 import { db , auth } from "../../DataBases/firebaseConfig";
 import { collection, query, where, getDocs } from "firebase/firestore";
-import { useNavigation } from "@react-navigation/native";
+import { RouteProp, useIsFocused, useNavigation } from "@react-navigation/native";
 
 const JobSearch = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const navigation = useNavigation();
+  const isFocused = useIsFocused();
+
+
+
+
+type JobDetailsRouteProp = RouteProp<
+  {
+    params: {
+      title: string;
+      description: string;
+      companyName: string;
+      coordinates?: { latitude: number; longitude: number } | string;
+      jobType: string;
+      images: string[];
+      userId: string;
+      requiredDocuments: string[];
+      jobId: string;
+    };
+  },
+  "params"
+>;
+
+
+  useEffect(() => {
+    if (!isFocused) {
+      setSearchTerm("");
+      setSearchResults([]);
+    }
+  }, [isFocused]);
 
   const handleSearch = async () => {
     if (!searchTerm.trim()) return;
